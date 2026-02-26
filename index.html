@@ -1,0 +1,2172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SF Summer Camp Planner</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #0369a1; --primary-hover: #075985; --primary-light: #e0f2fe;
+      --green: #059669; --amber: #d97706; --red: #dc2626;
+      --bg: #f8f6f1; --surface: #fff; --border: #ddd4c0;
+      --text: #1a2e3b; --muted: #56788a;
+      --selected-bg: #e0f2fe; --selected-border: #7dd3fc;
+      --k0-color: #2563eb; --k1-color: #0891b2;
+    }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden; }
+
+    /* ── To use a photo header, paste an image URL into --header-photo below ── */
+    :root { --header-photo: url('https://images.unsplash.com/photo-1439066290691-510066268af5?auto=format&fit=crop&w=1920&q=80'); }
+
+    header {
+      background-color: #0c4a6e;
+      background-image:
+        linear-gradient(135deg, rgba(12,74,110,.82) 0%, rgba(3,105,161,.62) 42%, rgba(14,165,233,.52) 72%, rgba(12,74,110,.72) 100%),
+        var(--header-photo);
+      background-size: cover;
+      background-position: center 40%;
+      color: white; padding: 1.1rem 1.5rem;
+      flex-shrink: 0; display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-family: 'Outfit', sans-serif; font-size: 1.45rem; font-weight: 800;
+      letter-spacing: -.01em; text-shadow: 0 1px 6px rgba(0,0,0,.3); }
+    header p  { opacity: .9; font-size: .82rem; font-style: italic; text-shadow: 0 1px 4px rgba(0,0,0,.25); }
+
+    .settings { background: #f4f8fb; border-bottom: 1px solid var(--border);
+      padding: .45rem 1.5rem; display: flex; flex-direction: column; gap: .3rem;
+      flex-shrink: 0; }
+    .settings-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; }
+    .kid-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem;
+      padding: .2rem 0 .2rem .75rem; border-left: 3px solid var(--kid-color, #2563eb); }
+    .sg { display: flex; flex-direction: column; gap: .2rem; }
+    .sg label { font-size: .7rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em; }
+    .sg input, .sg select { padding: .4rem .6rem; border: 1px solid var(--border);
+      border-radius: 7px; font-size: .85rem; background: white; outline: none; height: 34px; }
+    .sg input:focus, .sg select:focus { border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(3,105,161,.14); }
+    .sg input[type="text"] { width: 80px; }
+    .toggle-group { display: flex; border: 1px solid var(--border); border-radius: 7px;
+      overflow: hidden; height: 34px; }
+    .tgl { padding: 0 .75rem; font-size: .78rem; font-weight: 700; border: none;
+      background: white; cursor: pointer; color: var(--muted);
+      border-right: 1px solid var(--border); transition: background .15s, color .15s; }
+    .tgl:last-child { border-right: none; }
+    .tgl.active { background: var(--primary); color: white; }
+
+    main { flex: 1; display: grid; grid-template-columns: 420px 1fr; overflow: hidden; }
+
+    .left-panel { background: #fafcfe; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden; }
+    .panel-hdr { padding: .85rem 1rem .65rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .panel-hdr h2 { font-size: .95rem; font-weight: 700; font-family: 'Outfit', sans-serif; }
+    .summary { margin-top: .4rem; display: flex; flex-direction: column; gap: .22rem; }
+    .sum-kid-row { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
+    .sum-kid-label { font-size: .78rem; font-weight: 700; flex-shrink: 0; }
+    .sum-stat { font-size: .78rem; color: var(--muted); }
+    .sum-stat strong { color: var(--primary); }
+    .sum-stat.amber strong { color: var(--amber); }
+    .sum-stat.green strong { color: var(--green); }
+    .sum-actions { display: flex; justify-content: flex-end; margin-top: .1rem; }
+    .clear-btn { font-size: .72rem; color: var(--red); background: none; border: none;
+      cursor: pointer; text-decoration: underline; }
+    .week-list { flex: 1; overflow-y: auto; padding: .4rem; }
+    .week-list::-webkit-scrollbar { width: 5px; }
+    .week-list::-webkit-scrollbar-thumb { background: #b8cedd; border-radius: 3px; }
+    .week-empty { padding: 1.5rem 1rem; text-align: center; color: var(--muted);
+      font-size: .82rem; line-height: 1.5; }
+
+    .week-item { display: flex; align-items: stretch; gap: .4rem; padding: .5rem .65rem;
+      border-radius: 8px; border: 2px solid transparent; cursor: pointer;
+      transition: background .12s, border-color .12s; margin-bottom: .2rem; min-height: 48px; }
+    .week-item:hover { background: #e8f4fb; }
+    .week-item.selected { background: var(--selected-bg); border-color: var(--selected-border); }
+    .wk-num { font-size: .68rem; font-weight: 800; color: var(--muted);
+      width: 1.6rem; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .wk-dates { flex: 0 0 auto; min-width: 82px; display: flex; flex-direction: column; justify-content: center; }
+    .wk-dates .d { font-size: .8rem; font-weight: 600; }
+    .wk-dates .hol { font-size: .7rem; color: var(--amber); font-weight: 500; }
+    .wk-col { display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
+      gap: .2rem; min-width: 0; flex: 1; max-width: 130px; padding: 0 .15rem;
+      cursor: pointer; border-radius: 6px; }
+    .wk-col:hover { background: rgba(0,0,0,.03); }
+    .wk-col.k0-col { border-left: 1px solid var(--border); padding-left: .3rem; }
+    .wk-col.k1-col { border-left: 1px solid var(--border); padding-left: .3rem; }
+    .wk-na { font-size: .65rem; color: #cbd5e1; }
+    .week-item.vacation { background: #fffbeb !important; }
+    .week-item.vacation:hover { background: #fef3c7 !important; }
+    .week-item.vacation.selected { background: #fef9c3 !important; border-color: #fde047 !important; }
+    .wk-num { cursor: pointer; border-radius: 5px; padding: 2px 3px; transition: background .15s; }
+    .wk-num:hover { background: rgba(0,0,0,.07); }
+    .wk-vac-pill { font-size: .68rem; font-weight: 700; color: #92400e;
+      padding: .18rem .45rem; border-radius: 99px; background: #fef3c7; white-space: nowrap; }
+    .wk-open { font-size: .7rem; font-weight: 600; color: var(--muted);
+      padding: .18rem .45rem; border-radius: 99px; background: #ddeef8; }
+    .wk-chip { display: flex; align-items: center; gap: .25rem; font-size: .72rem;
+      font-weight: 700; padding: .22rem .5rem .22rem .45rem; border-radius: 99px;
+      color: white; max-width: 125px; }
+    .wk-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wk-rm { background: none; border: none; cursor: pointer; color: white;
+      font-size: .72rem; opacity: .8; flex-shrink: 0; line-height: 1; padding: 0; }
+    .wk-rm:hover { opacity: 1; }
+    .wk-chip-consider { display: flex; align-items: center; gap: .2rem; font-size: .72rem;
+      font-weight: 700; padding: .22rem .45rem; border-radius: 99px;
+      background: #fef9c3; border: 1.5px dashed #ca8a04; color: #78350f; max-width: 125px; }
+    .wk-chip-consider span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+    .wk-promote { background: none; border: none; cursor: pointer; color: #92400e;
+      font-size: .75rem; font-weight: 700; opacity: .75; flex-shrink: 0; line-height: 1; padding: 0; }
+    .wk-promote:hover { opacity: 1; }
+    .wk-rm-consider { background: none; border: none; cursor: pointer; color: #92400e;
+      font-size: .72rem; opacity: .7; flex-shrink: 0; line-height: 1; padding: 0; }
+    .wk-rm-consider:hover { opacity: 1; }
+
+    .right-panel { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+    .right-panel .panel-hdr { background: #fafcfe; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between; }
+    .right-panel .panel-hdr h2 { font-size: .9rem; font-family: 'Outfit', sans-serif; }
+    .right-hdr-left { display: flex; flex-direction: column; gap: .3rem; }
+    .camp-count { font-size: .78rem; color: var(--muted); padding-top: .15rem; }
+    .kid-tabs { display: flex; gap: .25rem; }
+    .kid-tab { padding: .2rem .6rem; border-radius: 99px; font-size: .75rem;
+      font-weight: 700; cursor: pointer; border: 1.5px solid transparent;
+      background: #ddeef8; color: var(--muted); }
+    .kid-tab.k0.active { background: #eff6ff; border-color: #2563eb; color: #2563eb; }
+    .kid-tab.k1.active { background: #f0fdfa; border-color: #0891b2; color: #0891b2; }
+    .search-bar { background: #fafcfe; padding: .5rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .search-wrap { position: relative; }
+    .search-wrap svg { position: absolute; left: .55rem; top: 50%; transform: translateY(-50%);
+      color: var(--muted); pointer-events: none; }
+    .search-wrap input { width: 100%; padding: .4rem .7rem .4rem 1.9rem; border: 1px solid var(--border);
+      border-radius: 7px; font-size: .85rem; background: #f4f8fb; outline: none; }
+    .search-wrap input:focus { border-color: var(--primary); background: white;
+      box-shadow: 0 0 0 3px rgba(3,105,161,.12); }
+
+    .camp-grid { flex: 1; overflow-y: auto; padding: .85rem;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+      gap: .75rem; align-content: start; }
+    .camp-grid::-webkit-scrollbar { width: 5px; }
+    .camp-grid::-webkit-scrollbar-thumb { background: #b8cedd; border-radius: 3px; }
+    .no-results { grid-column: 1/-1; text-align: center; padding: 3rem 1rem;
+      color: var(--muted); font-size: .875rem; }
+
+    .card { background: white; border-radius: 14px; border: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transition: box-shadow .2s, transform .15s; }
+    .card:hover { box-shadow: 0 6px 24px rgba(3,105,161,.12); transform: translateY(-1px); }
+    .card-bar { height: 5px; border-radius: 14px 14px 0 0; }
+    .card-body { padding: .8rem .9rem; flex: 1; }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: .4rem; }
+    .card-name { font-size: .88rem; font-weight: 700; line-height: 1.3; }
+    .badges { display: flex; flex-direction: column; align-items: flex-end; gap: .2rem; flex-shrink: 0; }
+    .badge { font-size: .66rem; font-weight: 700; padding: .18rem .42rem; border-radius: 99px; white-space: nowrap; }
+    .badge-day { background: #dbeafe; color: #1e40af; }
+    .badge-sleep { background: #fce7f3; color: #9d174d; }
+    .badge-type { background: #ddeef8; color: var(--muted); }
+    .badge-apply   { background: #fef3c7; color: #92400e; }
+    .badge-reg     { background: #dcfce7; color: #166534; }
+    .badge-custom  { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .card-desc { margin-top: .35rem; font-size: .78rem; color: var(--muted); line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .session-pill { margin-top: .4rem; display: inline-block; padding: .25rem .55rem;
+      background: #fdf4ff; border-radius: 6px; font-size: .74rem; color: #7e22ce; font-weight: 600; }
+    .verified-pill { margin-top: .3rem; display: inline-block; padding: .15rem .45rem;
+      background: #f0fdf4; border-radius: 6px; font-size: .7rem; color: #166534; font-weight: 600; }
+    .est-pill { margin-top: .3rem; display: inline-block; padding: .15rem .45rem;
+      background: #fefce8; border-radius: 6px; font-size: .7rem; color: #854d0e; font-weight: 600; }
+    .coming-soon-pill { margin-top: .3rem; display: inline-block; padding: .15rem .45rem;
+      background: #fff7ed; border-radius: 6px; font-size: .7rem; color: #9a3412; font-weight: 600; }
+    .card-meta { margin-top: .55rem; display: grid; grid-template-columns: auto 1fr;
+      gap: .15rem .4rem; font-size: .75rem; }
+    .mk { font-weight: 600; color: var(--muted); white-space: nowrap; }
+    .mv { color: var(--text); }
+    .card-foot { padding: .6rem .9rem; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; }
+    .cost { font-size: .88rem; font-weight: 700; color: var(--primary); }
+    .btn { padding: .38rem .8rem; border-radius: 7px; font-size: .77rem; font-weight: 700;
+      border: 1.5px solid var(--primary); cursor: pointer; transition: background .15s, color .15s;
+      text-decoration: none; display: inline-block; }
+    .btn-solid { background: var(--primary); color: white; }
+    .btn-solid:hover { background: var(--primary-hover); }
+    .btn-solid:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-outline { background: white; color: var(--primary); }
+    .btn-outline:hover { background: var(--primary-light); }
+
+    /* Expandable card */
+    .card { cursor: pointer; }
+    .card.expanded { border-color: var(--primary); box-shadow: 0 6px 28px rgba(3,105,161,.18); transform: none !important; }
+    .sessions-section { border-top: 1px solid var(--border); padding: .6rem .9rem .5rem; }
+    .sessions-section-title { font-size: .7rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: .4rem; }
+    .card-expand { border-top: 1px solid var(--border); padding: .65rem .9rem; background: #f4f8fb; border-radius: 0 0 14px 14px; }
+    .sessions-list { list-style: none; display: flex; flex-direction: column; gap: .25rem; margin-bottom: .6rem; }
+    .sessions-list li { font-size: .78rem; padding: .28rem .5rem; background: white;
+      border-radius: 6px; border: 1px solid var(--border); color: var(--text);
+      display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+      cursor: pointer; transition: background .15s, border-color .15s; }
+    .sessions-list li:hover { background: #eff6ff; border-color: var(--primary); }
+    .sessions-list li.sess-planned { background: #f0fdf4; border-color: #86efac; }
+    .sessions-list li.sess-planned:hover { background: #dcfce7; border-color: #4ade80; }
+    .sessions-list li.sess-considering { background: #fef9c3; border-color: #ca8a04; }
+    .sessions-list li.sess-considering:hover { background: #fef08a; border-color: #a16207; }
+    .sess-label { flex: 1; min-width: 0; }
+    .sess-action { font-size: .7rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+      color: var(--primary); display: flex; align-items: center; gap: .25rem; }
+    .sess-planned .sess-action { color: var(--green); }
+    .sess-considering .sess-action { color: #92400e; }
+    .sess-remove-btn { background: none; border: none; cursor: pointer; font-size: .7rem;
+      color: #92400e; opacity: .7; padding: 0; line-height: 1; }
+    .sess-remove-btn:hover { opacity: 1; }
+    .card-chevron { font-size: .7rem; color: var(--muted); transition: transform .2s; flex-shrink: 0; }
+    .card.expanded .card-chevron { transform: rotate(180deg); }
+
+    /* ── Auth modal ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6);
+      backdrop-filter: blur(4px); display: flex; align-items: center;
+      justify-content: center; z-index: 1000; }
+    .modal { background: white; border-radius: 16px; padding: 2rem 2.25rem;
+      width: 380px; max-width: calc(100vw - 2rem);
+      box-shadow: 0 25px 60px rgba(0,0,0,.25); }
+    .modal-logo { font-size: 1.8rem; margin-bottom: .3rem; }
+    .modal h2 { font-size: 1.25rem; font-weight: 800; font-family: 'Outfit', sans-serif; }
+    .modal-sub { font-size: .83rem; color: var(--muted); margin: .2rem 0 1.4rem; }
+    .modal-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; }
+    .modal-tab { padding: .45rem .9rem; font-size: .83rem; font-weight: 700;
+      border: none; background: none; cursor: pointer; color: var(--muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .modal-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .modal-field { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .9rem; }
+    .modal-field label { font-size: .72rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em; }
+    .modal-field input { padding: .55rem .75rem; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: .9rem; outline: none; }
+    .modal-field input:focus { border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(3,105,161,.14); }
+    .auth-msg { font-size: .8rem; min-height: 1.2em; margin-bottom: .6rem; }
+    .auth-msg.error { color: var(--red); }
+    .auth-msg.info  { color: var(--green); }
+    .auth-submit { width: 100%; padding: .65rem; border-radius: 8px;
+      background: var(--primary); color: white; border: none;
+      font-size: .92rem; font-weight: 700; cursor: pointer; }
+    .auth-submit:hover { background: var(--primary-hover); }
+    .auth-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── User bar in header ── */
+    .user-bar { margin-left: auto; display: flex; align-items: center; gap: .75rem; }
+    .user-email { font-size: .82rem; opacity: .75; }
+    .save-dot { font-size: .78rem; opacity: .65; }
+    .signout-btn { padding: .3rem .7rem; border-radius: 6px;
+      border: 1.5px solid rgba(255,255,255,.45); background: transparent;
+      color: white; font-size: .78rem; font-weight: 700; cursor: pointer; }
+    .signout-btn:hover { background: rgba(255,255,255,.15); }
+
+    #campMap { flex: 1; overflow: hidden; display: none; }
+    .leaflet-popup-content { margin: 10px 12px; font-family: 'Inter', sans-serif; }
+    .leaflet-popup-content-wrapper { border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.15); }
+
+    @media (max-width: 900px) {
+      body { height: auto; overflow: auto; }
+      main { grid-template-columns: 1fr; height: auto; overflow: visible; }
+      .left-panel { height: auto; overflow: visible; border-right: none; border-bottom: 1px solid var(--border); }
+      .week-list { max-height: 320px; overflow-y: auto; }
+      .right-panel { height: auto; overflow: visible; }
+      .camp-grid { max-height: none; overflow: visible; }
+    }
+
+    /* ── Collab pill in header ── */
+    .collab-pill { display:flex; align-items:center; gap:.4rem; font-size:.75rem;
+      background:rgba(255,255,255,.15); border-radius:99px; padding:.2rem .65rem; cursor:pointer;
+      border: 1.5px solid rgba(255,255,255,.3); color:white; white-space:nowrap; }
+    .collab-pill .dot { width:7px; height:7px; border-radius:50%; background:#34d399; flex-shrink:0; }
+    .collab-area-wrap { position:relative; }
+    .collab-menu { position:absolute; right:0; top:calc(100%+4px); background:#fff;
+      border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,.12);
+      min-width:190px; z-index:200; overflow:hidden; }
+    .collab-menu button { display:block; width:100%; text-align:left;
+      padding:.55rem 1rem; font-size:.8rem; background:none; border:none; cursor:pointer; color:var(--text); }
+    .collab-menu button:hover { background:#f1f5f9; }
+    .collab-menu .cm-divider { height:1px; background:var(--border); margin:.2rem 0; }
+
+    /* ── Group friends on camp cards ── */
+    .group-friends { margin-top:.5rem; padding-top:.5rem; border-top:1px dashed var(--border);
+      font-size:.7rem; color:#64748b; line-height:1.6; }
+
+    /* ── Week friend initials ── */
+    .wk-friends { display:flex; gap:.2rem; align-items:center; flex-shrink:0; padding-left:.3rem; }
+    .wk-friend-init { width:18px; height:18px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:.55rem; font-weight:700; color:#fff; flex-shrink:0; }
+
+    /* ── Collab modal extras ── */
+    .collab-modal-tabs { display:flex; border-bottom:1px solid var(--border); margin-bottom:1.25rem; }
+    .collab-modal-tab { padding:.45rem .9rem; font-size:.83rem; font-weight:700;
+      border:none; background:none; cursor:pointer; color:var(--muted);
+      border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .collab-modal-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .invite-link-box { display:flex; align-items:center; gap:.5rem; background:#f4f8fb;
+      border:1px solid var(--border); border-radius:8px; padding:.5rem .75rem; margin:.6rem 0; }
+    .invite-link-box input { flex:1; border:none; background:transparent; font-size:.78rem;
+      color:var(--text); outline:none; font-family:monospace; min-width:0; }
+    .invite-code-box { font-family:monospace; font-size:1.4rem; font-weight:800; letter-spacing:.15em;
+      background:#f4f8fb; border:1px solid var(--border); border-radius:8px;
+      padding:.65rem 1rem; text-align:center; color:var(--primary); margin:.6rem 0; }
+    .member-list { list-style:none; display:flex; flex-direction:column; gap:.4rem; margin:.6rem 0; }
+    .member-list li { display:flex; align-items:center; gap:.5rem; font-size:.83rem;
+      padding:.35rem .5rem; border-radius:7px; background:#f8f9fa; }
+    .member-list li .member-dot { width:8px; height:8px; border-radius:50%; background:#34d399; flex-shrink:0; }
+  </style>
+</head>
+<body>
+
+<!-- Admin panel -->
+<div id="adminPanel" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeAdmin()">
+  <div class="modal" style="width:520px;max-width:calc(100vw - 2rem)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h2 style="font-size:1.1rem">A/B Test Results</h2>
+      <button onclick="closeAdmin()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+    </div>
+    <div id="adminContent" style="font-size:.85rem"></div>
+  </div>
+</div>
+
+<!-- Add/Edit custom camp modal -->
+<div id="addCampModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeAddCampModal()">
+  <div class="modal" style="width:480px;max-width:calc(100vw - 2rem);max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+      <h2 id="addCampModalTitle" style="font-size:1.1rem">Add Custom Camp</h2>
+      <button onclick="closeAddCampModal()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+    </div>
+    <div class="modal-field">
+      <label>Camp name *</label>
+      <input type="text" id="cc_name" placeholder="e.g. Oakland Nature School" autocomplete="off" />
+    </div>
+    <div class="modal-field">
+      <label>Website URL</label>
+      <input type="url" id="cc_url" placeholder="https://…" autocomplete="off" />
+    </div>
+    <div style="display:flex;gap:.75rem;margin-bottom:.9rem;align-items:flex-end">
+      <div class="sg" style="flex:1">
+        <label>Type</label>
+        <select id="cc_type" style="width:100%;height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white">
+          <option>STEM</option><option>Arts</option><option>Performing Arts</option>
+          <option>Sports</option><option>Nature</option><option>Leadership</option>
+          <option>Traditional</option><option>Jewish</option><option>Other</option>
+        </select>
+      </div>
+      <div class="sg">
+        <label>Style</label>
+        <div class="toggle-group">
+          <button class="tgl active" id="cc_day_btn" onclick="setCampStyle('day')">Day</button>
+          <button class="tgl" id="cc_sleep_btn" onclick="setCampStyle('sleep')">Sleepaway</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.75rem;margin-bottom:.9rem">
+      <div class="sg" style="flex:1">
+        <label>Ages</label>
+        <div style="display:flex;gap:.35rem;align-items:center">
+          <input type="number" id="cc_age_min" min="3" max="18" value="5"
+            style="width:54px;padding:.4rem .5rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;height:34px;background:white" />
+          <span style="font-size:.8rem;color:var(--muted)">–</span>
+          <input type="number" id="cc_age_max" min="3" max="18" value="15"
+            style="width:54px;padding:.4rem .5rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;height:34px;background:white" />
+        </div>
+      </div>
+      <div class="sg" style="flex:2">
+        <label>Cost</label>
+        <input type="text" id="cc_cost" placeholder="e.g. ~$600/week"
+          style="width:100%;height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white" />
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Location</label>
+      <input type="text" id="cc_loc" placeholder="e.g. Berkeley, CA" autocomplete="off" />
+    </div>
+    <div class="modal-field">
+      <label>Description</label>
+      <textarea id="cc_desc" rows="2" placeholder="Brief description (optional)"
+        style="padding:.5rem .75rem;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;resize:vertical;width:100%;font-family:inherit;outline:none;line-height:1.5"></textarea>
+    </div>
+    <div style="margin-bottom:.9rem">
+      <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem">Availability</div>
+      <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer">
+        <input type="checkbox" id="cc_all_summer" checked onchange="toggleCampDateRange()" />
+        Available all summer (no date filter)
+      </label>
+      <div id="cc_dates_row" style="display:none;margin-top:.55rem;align-items:center">
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input type="date" id="cc_date_start"
+            style="height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white" />
+          <span style="color:var(--muted);font-size:.85rem">to</span>
+          <input type="date" id="cc_date_end"
+            style="height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white" />
+        </div>
+      </div>
+    </div>
+    <div id="cc_msg" style="font-size:.8rem;color:var(--red);min-height:1.2em;margin-bottom:.5rem"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.75rem">
+      <button class="btn btn-outline" onclick="closeAddCampModal()">Cancel</button>
+      <button class="btn btn-solid" id="cc_submit" onclick="submitCustomCamp()">Add Camp</button>
+    </div>
+  </div>
+</div>
+
+<!-- Household modal -->
+<div id="householdModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeHouseholdModal()">
+  <div class="modal" style="width:440px;max-width:calc(100vw - 2rem)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+      <h2 id="hhModalTitle" style="font-size:1.1rem">Share Your Plan</h2>
+      <button onclick="closeHouseholdModal()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+    </div>
+    <div id="hhModalContent"></div>
+  </div>
+</div>
+
+<!-- Group modal -->
+<div id="groupModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeGroupModal()">
+  <div class="modal" style="width:440px;max-width:calc(100vw - 2rem)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h2 id="grpModalTitle" style="font-size:1.1rem">Friend Group</h2>
+      <button onclick="closeGroupModal()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+    </div>
+    <div id="grpModalContent"></div>
+  </div>
+</div>
+
+<!-- Admin camps modal -->
+<div id="adminCampsModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeAdminCampsModal()">
+  <div class="modal" style="width:660px;max-width:calc(100vw - 2rem);max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem">
+      <h2 style="font-size:1.1rem">Manage Camps</h2>
+      <button onclick="closeAdminCampsModal()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.6rem">
+      <button class="btn btn-solid" style="font-size:.78rem" onclick="openAdminAddCamp()">+ Add Camp</button>
+    </div>
+    <div id="adminCampsList" style="overflow-y:auto;flex:1;border-top:1px solid var(--border)"></div>
+  </div>
+</div>
+
+<!-- Auth modal -->
+<div id="authModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-logo">🌉</div>
+    <h2>SF Summer Camp Planner</h2>
+    <p class="modal-sub">Sign in to save your plan across sessions</p>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tabSignin" onclick="switchTab('signin')">Sign in</button>
+      <button class="modal-tab" id="tabSignup" onclick="switchTab('signup')">Create account</button>
+    </div>
+    <div class="modal-field">
+      <label>Email</label>
+      <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email" />
+    </div>
+    <div class="modal-field">
+      <label>Password</label>
+      <input type="password" id="authPassword" placeholder="Password"
+        onkeydown="if(event.key==='Enter')handleAuth()" />
+    </div>
+    <div id="authMsg" class="auth-msg"></div>
+    <button class="auth-submit" id="authSubmit" onclick="handleAuth()">Sign in</button>
+  </div>
+</div>
+
+<header>
+  <div>
+    <h1>🌉 SF Summer Camp Planner — 2026</h1>
+    <p>Plan each child's summer week by week · Sleepaway dates verified from camp websites · Day camp dates estimated</p>
+  </div>
+  <div class="user-bar" id="userBar" style="display:none">
+    <span class="user-email" id="userEmail"></span>
+    <span class="save-dot" id="saveDot"></span>
+    <div class="collab-area-wrap" id="collabArea"></div>
+    <button class="signout-btn" onclick="signOut()">Sign out</button>
+  </div>
+</header>
+
+<div class="settings">
+  <div id="kidRows"></div>
+  <!-- Shared filters row -->
+  <div class="settings-row">
+    <div class="sg">
+      <label>Children</label>
+      <div class="toggle-group" id="kidCountToggle">
+        <button class="tgl" onclick="setKidCount(1)">1</button>
+        <button class="tgl active" onclick="setKidCount(2)">2</button>
+        <button class="tgl" onclick="setKidCount(3)">3</button>
+        <button class="tgl" onclick="setKidCount(4)">4</button>
+      </div>
+    </div>
+    <div class="sg">
+      <label>Camp type</label>
+      <div class="toggle-group">
+        <button class="tgl active" data-sl="">Both</button>
+        <button class="tgl" data-sl="day">Day</button>
+        <button class="tgl" data-sl="sleep">Sleepaway</button>
+      </div>
+    </div>
+    <div class="sg">
+      <label>Admission</label>
+      <div class="toggle-group">
+        <button class="tgl active" data-app="">All</button>
+        <button class="tgl" data-app="reg">Register</button>
+        <button class="tgl" data-app="apply">Apply</button>
+      </div>
+    </div>
+    <div class="sg">
+      <label>Activity</label>
+      <select id="actFilter">
+        <option value="">All activities</option>
+        <option>STEM</option><option>Arts</option><option>Performing Arts</option>
+        <option>Sports</option><option>Nature</option><option>Leadership</option>
+        <option>Traditional</option><option>Jewish</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="left-panel">
+    <div class="panel-hdr">
+      <h2 onclick="handleTitleClick()" style="cursor:default;user-select:none">Your Summer</h2>
+      <div class="summary" id="summary"></div>
+    </div>
+    <div class="week-list" id="weekList"></div>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-hdr">
+      <div class="right-hdr-left">
+        <h2 id="campsTitle">All Camps</h2>
+        <div class="kid-tabs" id="kidTabs"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+        <div class="toggle-group" style="height:28px">
+          <button class="tgl active" id="viewListBtn" onclick="setMapView(false)">List</button>
+          <button class="tgl" id="viewMapBtn" onclick="setMapView(true)">Map</button>
+        </div>
+        <span class="camp-count" id="campCount"></span>
+        <button class="btn btn-outline" style="font-size:.73rem;padding:.25rem .6rem;white-space:nowrap" onclick="openAddCampModal(null)">+ Add camp</button>
+      </div>
+    </div>
+    <div class="search-bar">
+      <div class="search-wrap">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="search" id="campSearch" placeholder="Search camps…" />
+      </div>
+    </div>
+    <div class="camp-grid" id="campGrid"></div>
+    <div id="campMap"></div>
+  </div>
+</main>
+
+<script>
+// ── Date helpers ──────────────────────────────────────────────────────────
+function pd(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function iso(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function addD(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function fmt(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+function nextMon(d) {
+  const r=new Date(d), day=r.getDay();
+  if(day===1) return r;
+  r.setDate(r.getDate()+(day===0?1:8-day));
+  return r;
+}
+
+// July 4, 2026 falls on Saturday; observed Friday July 3
+const HOLS = {'2026-07-03':'⚡ Jul 4 obs.','2026-07-04':'⚡ Jul 4'};
+function weekHol(mon,fri) {
+  let d=new Date(pd(mon)); const f=pd(fri);
+  while(d<=f){ const k=iso(d); if(HOLS[k]) return HOLS[k]; d=addD(d,1); }
+  return null;
+}
+function genWeeks(lastS,firstS) {
+  if(!lastS||!firstS) return [];
+  const start=nextMon(addD(pd(lastS),1));
+  let endMon=new Date(pd(firstS));
+  const day=endMon.getDay();
+  endMon.setDate(endMon.getDate()-(day===0?6:day-1));
+  if(addD(endMon,4)>=pd(firstS)) endMon.setDate(endMon.getDate()-7);
+  const weeks=[]; let d=new Date(start);
+  while(d<=endMon){ weeks.push({mon:iso(d),fri:iso(addD(d,4))}); d=addD(d,7); }
+  return weeks;
+}
+
+// ── Camp data loaded from Supabase ────────────────────────────────────────
+let CAMPS = [];
+
+// ── Custom camp helpers ───────────────────────────────────────────────────
+function allCamps() { return [...CAMPS, ...S.customCamps]; }
+const CUSTOM_COLORS = ['#0369a1','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#be185d','#16a34a'];
+
+// ── App state ─────────────────────────────────────────────────────────────
+const S = {
+  kids: [
+    { name:"Kid 1", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} },
+    { name:"Kid 2", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} }
+  ],
+  activeKid: 0, variant: null, customCamps: [], mapView: false, vacation: {},
+  slFilter:"", actFilter:"", q:"", selWeek:null, expandCard:null, appFilter:"",
+  household: null,   // { id, ownerId, isOwner } | null
+  group: null        // { id, name, inviteCode, members:[{userId,displayName,planData}] } | null
+};
+let WEEKS = [];
+let _pendingInvite = null;
+// Extract invite token from URL on page load
+_pendingInvite = new URLSearchParams(location.search).get('invite');
+
+// ── Kid colors ────────────────────────────────────────────────────────────
+const KID_COLORS = ['#2563eb','#0891b2','#7c3aed','#059669'];
+
+// ── Week generation — union of all kids ───────────────────────────────────
+function genAllWeeks() {
+  const monSet = new Set();
+  S.kids.forEach(k => genWeeks(k.lastDay, k.firstDay).forEach(w => monSet.add(w.mon)));
+  return [...monSet].sort().map(mon => ({ mon, fri: iso(addD(pd(mon),4)) }));
+}
+function kidHasWeek(kidIdx, weekMon) {
+  const k = S.kids[kidIdx];
+  return genWeeks(k.lastDay, k.firstDay).some(w => w.mon === weekMon);
+}
+
+// ── Availability ──────────────────────────────────────────────────────────
+function campAvail(camp, mon, fri) {
+  const wm=pd(mon), wf=pd(fri);
+  if(!camp.sleep) {
+    if(!camp.range) return true; // custom day camp with no dates = always available
+    return wm>=pd(camp.range.s) && wm<=pd(camp.range.e);
+  }
+  if(!camp.sessions?.length) return true; // custom sleepaway with no sessions = always available
+  return camp.sessions.some(s => pd(s.s)<=wf && pd(s.e)>=wm);
+}
+function getSessIdx(camp, mon, fri) {
+  if(!camp.sleep) return -1;
+  const wm=pd(mon), wf=pd(fri);
+  return camp.sessions.findIndex(s => pd(s.s)<=wf && pd(s.e)>=wm);
+}
+function campPassesFilters(c) {
+  const age = S.kids[S.activeKid].age;
+  if(age && (parseInt(age)<c.ageMin || parseInt(age)>c.ageMax)) return false;
+  if(S.slFilter==='day' && c.sleep) return false;
+  if(S.slFilter==='sleep' && !c.sleep) return false;
+  if(S.actFilter && c.type!==S.actFilter) return false;
+  if(S.appFilter==='apply' && !c.appRequired) return false;
+  if(S.appFilter==='reg' && c.appRequired) return false;
+  if(S.q && !`${c.name} ${c.desc} ${c.loc} ${c.type}`.toLowerCase().includes(S.q.toLowerCase())) return false;
+  return true;
+}
+function getFiltered() {
+  return allCamps().filter(c => {
+    if(!campPassesFilters(c)) return false;
+    if(S.selWeek) {
+      const fri=iso(addD(pd(S.selWeek),4));
+      return campAvail(c, S.selWeek, fri);
+    }
+    return true;
+  });
+}
+
+// ── Status checks — use activeKid ─────────────────────────────────────────
+function isSessionConsidering(campId, sessIdx) {
+  const k = S.kids[S.activeKid];
+  return Object.values(k.consider).some(arr => arr.some(e => e.campId===campId && e.sessIdx===sessIdx));
+}
+function isDayWeekConsidering(campId, weekMon) {
+  const k = S.kids[S.activeKid];
+  return (k.consider[weekMon]||[]).some(e => e.campId===campId);
+}
+function isSessionPlanned(campId, sessIdx) {
+  const k = S.kids[S.activeKid];
+  return Object.values(k.planned).some(e => e.campId===campId && e.sessIdx===sessIdx);
+}
+function isDayWeekPlanned(campId, weekMon) {
+  const k = S.kids[S.activeKid];
+  return k.planned[weekMon]?.campId===campId;
+}
+
+// ── Add to consideration — uses activeKid ─────────────────────────────────
+function addSessionToConsider(campId, sessIdx) {
+  const k = S.kids[S.activeKid];
+  const camp=allCamps().find(c=>c.id===campId);
+  if(!camp||!camp.sleep) return;
+  const sess=camp.sessions[sessIdx];
+  const ss=pd(sess.s), se=pd(sess.e);
+  WEEKS.forEach(w => {
+    const wm=pd(w.mon), wf=pd(w.fri);
+    if(ss<=wf && se>=wm) {
+      if(!k.consider[w.mon]) k.consider[w.mon]=[];
+      if(!k.consider[w.mon].some(e=>e.campId===campId&&e.sessIdx===sessIdx))
+        k.consider[w.mon].push({campId,sessIdx,color:camp.color,name:camp.name});
+    }
+  });
+  renderAll();
+}
+function addDayWeekToConsider(campId, weekMon) {
+  const k = S.kids[S.activeKid];
+  const camp=allCamps().find(c=>c.id===campId);
+  if(!camp) return;
+  if(!k.consider[weekMon]) k.consider[weekMon]=[];
+  if(!k.consider[weekMon].some(e=>e.campId===campId))
+    k.consider[weekMon].push({campId,sessIdx:null,color:camp.color,name:camp.name});
+  renderAll();
+}
+
+// ── Remove from consideration — uses activeKid ────────────────────────────
+function removeSessionFromConsider(campId, sessIdx) {
+  const k = S.kids[S.activeKid];
+  Object.keys(k.consider).forEach(key=>{
+    k.consider[key]=k.consider[key].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+    if(!k.consider[key].length) delete k.consider[key];
+  });
+  renderAll();
+}
+function removeDayWeekFromConsider(campId, weekMon) {
+  const k = S.kids[S.activeKid];
+  if(k.consider[weekMon]) {
+    k.consider[weekMon]=k.consider[weekMon].filter(e=>e.campId!==campId);
+    if(!k.consider[weekMon].length) delete k.consider[weekMon];
+  }
+  renderAll();
+}
+
+// ── Promote to planned — uses activeKid ──────────────────────────────────
+function promoteSessionToPlanned(campId, sessIdx) {
+  const k = S.kids[S.activeKid];
+  const camp=allCamps().find(c=>c.id===campId);
+  if(!camp||!camp.sleep) return;
+  const sess=camp.sessions[sessIdx];
+  const ss=pd(sess.s), se=pd(sess.e);
+  WEEKS.forEach(w => {
+    const wm=pd(w.mon), wf=pd(w.fri);
+    if(ss<=wf && se>=wm) {
+      k.planned[w.mon]={campId,sessIdx,color:camp.color,name:camp.name};
+      if(k.consider[w.mon]) {
+        k.consider[w.mon]=k.consider[w.mon].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+        if(!k.consider[w.mon].length) delete k.consider[w.mon];
+      }
+    }
+  });
+  renderAll();
+}
+function promoteDayWeekToPlanned(campId, weekMon) {
+  const k = S.kids[S.activeKid];
+  const camp=allCamps().find(c=>c.id===campId);
+  if(!camp) return;
+  k.planned[weekMon]={campId,sessIdx:null,color:camp.color,name:camp.name};
+  if(k.consider[weekMon]) {
+    k.consider[weekMon]=k.consider[weekMon].filter(e=>e.campId!==campId);
+    if(!k.consider[weekMon].length) delete k.consider[weekMon];
+  }
+  renderAll();
+}
+
+// ── Remove from planned — uses activeKid ─────────────────────────────────
+function removeSessionFromPlanned(campId, sessIdx) {
+  const k = S.kids[S.activeKid];
+  Object.keys(k.planned).forEach(key=>{
+    if(k.planned[key].campId===campId&&k.planned[key].sessIdx===sessIdx) delete k.planned[key];
+  });
+  renderAll();
+}
+function removeDayWeekFromPlanned(weekMon) {
+  const k = S.kids[S.activeKid];
+  delete k.planned[weekMon];
+  renderAll();
+}
+
+// ── Week panel chip actions — explicit kidIdx ─────────────────────────────
+function promoteConsiderChip(weekMon, campId, sessIdx, kidIdx) {
+  const k = S.kids[kidIdx];
+  const camp = allCamps().find(c=>c.id===campId);
+  if(!camp) return;
+  if(camp.sleep && sessIdx != null) {
+    const sess = camp.sessions[sessIdx];
+    const ss=pd(sess.s), se=pd(sess.e);
+    WEEKS.forEach(w => {
+      const wm=pd(w.mon), wf=pd(w.fri);
+      if(ss<=wf && se>=wm) {
+        k.planned[w.mon]={campId,sessIdx,color:camp.color,name:camp.name};
+        if(k.consider[w.mon]) {
+          k.consider[w.mon]=k.consider[w.mon].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+          if(!k.consider[w.mon].length) delete k.consider[w.mon];
+        }
+      }
+    });
+  } else {
+    k.planned[weekMon]={campId,sessIdx:null,color:camp.color,name:camp.name};
+    if(k.consider[weekMon]) {
+      k.consider[weekMon]=k.consider[weekMon].filter(e=>e.campId!==campId);
+      if(!k.consider[weekMon].length) delete k.consider[weekMon];
+    }
+  }
+  renderAll();
+}
+function removeConsiderChip(weekMon, campId, sessIdx, kidIdx) {
+  const k = S.kids[kidIdx];
+  const camp = allCamps().find(c=>c.id===campId);
+  if(!camp) return;
+  if(camp.sleep && sessIdx != null) {
+    Object.keys(k.consider).forEach(key=>{
+      k.consider[key]=k.consider[key].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+      if(!k.consider[key].length) delete k.consider[key];
+    });
+  } else {
+    if(k.consider[weekMon]) {
+      k.consider[weekMon]=k.consider[weekMon].filter(e=>e.campId!==campId);
+      if(!k.consider[weekMon].length) delete k.consider[weekMon];
+    }
+  }
+  renderAll();
+}
+function removePlannedChip(weekMon, kidIdx) {
+  const k = S.kids[kidIdx];
+  const e = k.planned[weekMon];
+  if(!e) return;
+  const camp = allCamps().find(c=>c.id===e.campId);
+  if(camp && camp.sleep && e.sessIdx != null) {
+    Object.keys(k.planned).forEach(key=>{
+      if(k.planned[key].campId===e.campId&&k.planned[key].sessIdx===e.sessIdx) delete k.planned[key];
+    });
+  } else {
+    delete k.planned[weekMon];
+  }
+  renderAll();
+}
+
+// ── Week-select flow — adds to activeKid's consideration ──────────────────
+function addToPlan(campId, sessIdx) {
+  if(!S.selWeek) return;
+  const k = S.kids[S.activeKid];
+  const camp=allCamps().find(c=>c.id===campId);
+  if(!camp) return;
+  if(!camp.sleep) {
+    if(!k.consider[S.selWeek]) k.consider[S.selWeek]=[];
+    if(!k.consider[S.selWeek].some(e=>e.campId===campId))
+      k.consider[S.selWeek].push({campId,sessIdx:null,color:camp.color,name:camp.name});
+  } else {
+    const sess=camp.sessions[sessIdx];
+    const ss=pd(sess.s), se=pd(sess.e);
+    WEEKS.forEach(w => {
+      const wm=pd(w.mon), wf=pd(w.fri);
+      if(ss<=wf && se>=wm) {
+        if(!k.consider[w.mon]) k.consider[w.mon]=[];
+        if(!k.consider[w.mon].some(e=>e.campId===campId&&e.sessIdx===sessIdx))
+          k.consider[w.mon].push({campId,sessIdx,color:camp.color,name:camp.name});
+      }
+    });
+  }
+  S.selWeek=null;
+  renderAll();
+}
+function clearPlan() {
+  if(confirm('Clear the entire summer plan for both kids?')) {
+    S.kids.forEach(k => { k.consider={}; k.planned={}; });
+    S.vacation = {};
+    renderAll();
+  }
+}
+function toggleVacation(mon) {
+  if(S.vacation[mon]) { delete S.vacation[mon]; }
+  else { S.vacation[mon] = true; }
+  renderAll();
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────
+function renderSummary() {
+  const el = document.getElementById('summary');
+  if(!WEEKS.length) { el.innerHTML=''; return; }
+  const kidColors = KID_COLORS;
+  let hasAny = false;
+  const rows = S.kids.map((k, kidIdx) => {
+    const kidWeeks = WEEKS.filter(w => kidHasWeek(kidIdx, w.mon));
+    const total = kidWeeks.length;
+    if(!total) return '';
+    const plannedCount = kidWeeks.filter(w => k.planned[w.mon]).length;
+    const considerCount = kidWeeks.filter(w => !k.planned[w.mon] && (k.consider[w.mon]||[]).length>0).length;
+    const openCount = total - plannedCount - considerCount;
+    const seen = new Set(); let cost = 0;
+    Object.values(k.planned).forEach(e => {
+      const key=`${e.campId}-${e.sessIdx}`;
+      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c) cost+=c.costN; }
+    });
+    if(plannedCount>0||considerCount>0) hasAny=true;
+    return `<div class="sum-kid-row">
+      <span class="sum-kid-label" style="color:${kidColors[kidIdx]}">${k.name}:</span>
+      <span class="sum-stat green"><strong>${plannedCount}</strong>/${total} planned</span>
+      ${considerCount>0?`<span class="sum-stat amber"><strong>${considerCount}</strong> considering</span>`:''}
+      <span class="sum-stat"><strong>${openCount}</strong> open</span>
+      ${cost>0?`<span class="sum-stat green">~<strong>$${cost.toLocaleString()}</strong></span>`:''}
+    </div>`;
+  }).join('');
+  el.innerHTML = rows + (hasAny ? `<div class="sum-actions"><button class="clear-btn" onclick="clearPlan()">Clear All</button></div>` : '');
+}
+
+// ── Render weeks ──────────────────────────────────────────────────────────
+function renderWeeks() {
+  const el = document.getElementById('weekList');
+  if(!WEEKS.length) {
+    el.innerHTML='<div class="week-empty">Enter school dates above to see your summer weeks.</div>';
+    return;
+  }
+  let _wkHeader = '';
+  if(S.variant === 'B') {
+    const _kidHdrs = S.kids.map((k,i) =>
+      `<div class="wk-col k${i}-col" style="justify-content:center;padding:.15rem">` +
+      `<span style="font-size:.68rem;font-weight:800;color:${KID_COLORS[i]};text-transform:uppercase;letter-spacing:.04em">${k.name}</span></div>`
+    ).join('');
+    _wkHeader = `<div style="display:flex;align-items:center;gap:.4rem;padding:.15rem .65rem .3rem;border-bottom:1px solid var(--border);margin-bottom:.15rem">` +
+      `<div style="width:1.6rem;flex-shrink:0;visibility:hidden"></div>` +
+      `<div style="min-width:82px;flex:0 0 auto;visibility:hidden;font-size:.8rem">dates</div>` +
+      `${_kidHdrs}</div>`;
+  }
+  el.innerHTML = _wkHeader + WEEKS.map((w,i) => {
+    const mon=pd(w.mon), fri=pd(w.fri);
+    const isSel = S.selWeek===w.mon;
+    const hol = weekHol(w.mon, w.fri);
+
+    const isVacation = !!S.vacation[w.mon];
+
+    const kidCols = S.kids.map((_, kidIdx) => {
+      const colCls = `wk-col k${kidIdx}-col`;
+      if(!kidHasWeek(kidIdx, w.mon)) {
+        return `<div class="${colCls}"><span class="wk-na">—</span></div>`;
+      }
+      if(isVacation) {
+        return `<div class="${colCls}"><span class="wk-vac-pill">🏖 Vacation</span></div>`;
+      }
+      const k = S.kids[kidIdx];
+      const considers = k.consider[w.mon] || [];
+      const p = k.planned[w.mon];
+      let chips = [];
+      considers.forEach(e => {
+        chips.push(`<div class="wk-chip-consider"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>`);
+      });
+      if(p) chips.push(`<div class="wk-chip" style="background:${p.color}"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>`);
+      if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
+      return `<div class="${colCls}" onclick="event.stopPropagation();selWeekKid('${w.mon}',${kidIdx})">${chips.join('')}</div>`;
+    });
+
+    let cls = ['week-item'];
+    if(isSel) cls.push('selected');
+    if(isVacation) cls.push('vacation');
+
+    // Friend initials for this week
+    let friendInitials = '';
+    if(S.group?.members?.length) {
+      const FRIEND_COLORS = ['#7c3aed','#059669','#d97706','#dc2626','#0891b2','#be185d'];
+      const circles = S.group.members.map((member, mi) => {
+        const pd2 = member.planData;
+        if(!pd2) return null;
+        const allKidsData = pd2.kids || [];
+        const hasActivity = allKidsData.some(k =>
+          (k.planned && k.planned[w.mon]) || (k.consider && (k.consider[w.mon]||[]).length > 0)
+        );
+        if(!hasActivity) return null;
+        const initials = member.displayName.trim()[0].toUpperCase();
+        const color = FRIEND_COLORS[mi % FRIEND_COLORS.length];
+        return `<span class="wk-friend-init" style="background:${color}" title="${member.displayName}">${initials}</span>`;
+      }).filter(Boolean);
+      if(circles.length) friendInitials = `<div class="wk-friends">${circles.join('')}</div>`;
+    }
+
+    return `<div class="${cls.join(' ')}" onclick="selWeek('${w.mon}')">
+      <div class="wk-num" onclick="event.stopPropagation();toggleVacation('${w.mon}')" title="${isVacation?'Remove vacation block':'Block this week for vacation'}">${isVacation?'🏖':`W${i+1}`}</div>
+      <div class="wk-dates"><div class="d">${fmt(mon)} – ${fmt(fri)}</div>${hol?`<div class="hol">⚠ ${hol}</div>`:''}</div>
+      ${friendInitials}
+      ${kidCols.join('')}
+    </div>`;
+  }).join('');
+}
+
+// ── Day camp weeks — filtered to activeKid's summer ───────────────────────
+function getDayCampWeeks(camp) {
+  if(!camp.range) return WEEKS.filter(w => kidHasWeek(S.activeKid, w.mon));
+  const rs=pd(camp.range.s), re=pd(camp.range.e);
+  return WEEKS.filter(w => kidHasWeek(S.activeKid, w.mon) && pd(w.mon)>=rs && pd(w.mon)<=re);
+}
+
+// ── Render camps ──────────────────────────────────────────────────────────
+function renderCamps() {
+  const grid = document.getElementById('campGrid');
+  const titleEl = document.getElementById('campsTitle');
+  const countEl = document.getElementById('campCount');
+  const kidTabsEl = document.getElementById('kidTabs');
+
+  if (!_campsLoaded) {
+    grid.innerHTML = `<div class="no-results">
+      <div style="font-size:1.5rem;margin-bottom:.4rem">⏳</div>Loading camps…
+    </div>`;
+    return;
+  }
+
+  // Update kid selector tabs
+  if(S.selWeek) {
+    kidTabsEl.style.display = 'flex';
+    kidTabsEl.innerHTML = S.kids.map((k, i) => {
+      const isActive = S.activeKid===i;
+      return `<button class="kid-tab k${i%4}${isActive?' active':''}" onclick="setActiveKid(${i})">${k.name}</button>`;
+    }).join('');
+  } else {
+    kidTabsEl.style.display = 'none';
+    kidTabsEl.innerHTML = '';
+  }
+
+  const filtered = getFiltered();
+  titleEl.textContent = S.selWeek ? `${fmt(pd(S.selWeek))} – ${fmt(addD(pd(S.selWeek),4))}` : 'All Camps';
+  countEl.textContent = `${filtered.length} camp${filtered.length!==1?'s':''}`;
+
+  const mapEl = document.getElementById('campMap');
+
+  if(S.selWeek && S.vacation[S.selWeek]) {
+    grid.style.display = ''; mapEl.style.display = 'none';
+    grid.innerHTML = `<div class="no-results" style="padding-top:3rem">
+      <div style="font-size:2.5rem;margin-bottom:.6rem">🏖</div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:.35rem">Vacation week</div>
+      <div style="color:var(--muted);font-size:.83rem;margin-bottom:1.25rem">This week is blocked for family vacation.</div>
+      <button class="btn btn-outline" onclick="toggleVacation('${S.selWeek}')">Remove vacation block</button>
+    </div>`;
+    return;
+  }
+
+  grid.style.display = S.mapView ? 'none' : '';
+  mapEl.style.display = S.mapView ? 'block' : 'none';
+  if(S.mapView) { renderMap(filtered); return; }
+
+  if(!filtered.length) {
+    grid.innerHTML=`<div class="no-results"><div style="font-size:1.5rem;margin-bottom:.4rem">🔍</div>No camps match your filters.</div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(camp => {
+    const fri = S.selWeek ? iso(addD(pd(S.selWeek),4)) : null;
+    const isExp = S.expandCard===camp.id;
+    let sessInfo='', sessIdx=null;
+    if(S.selWeek&&camp.sleep){
+      sessIdx=getSessIdx(camp,S.selWeek,fri);
+      if(sessIdx>=0){
+        const s=camp.sessions[sessIdx];
+        sessInfo=`<div class="session-pill">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} &nbsp;·&nbsp; ${s.lbl}</div>`;
+      }
+    }
+    const verifiedBadge = camp.custom ? '' : (
+      camp.comingSoon
+        ? `<div class="coming-soon-pill">📅 2026 dates coming soon</div>`
+        : camp.verified
+          ? `<div class="verified-pill">✓ 2026 dates verified</div>`
+          : `<div class="est-pill">~ 2026 dates estimated</div>`);
+    let btn;
+    if(S.selWeek){
+      const avail=campAvail(camp,S.selWeek,fri);
+      btn=avail
+        ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessIdx})">+ Consider</button>`
+        :`<button class="btn btn-solid" disabled onclick="event.stopPropagation()">Not available</button>`;
+    } else {
+      btn = camp.url
+        ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>`
+        : `<span></span>`;
+    }
+    let sessionsSection='';
+    if(camp.sleep&&camp.sessions?.length) {
+      sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div><ul class="sessions-list">${
+        camp.sessions.map((s,i)=>{
+          const considering=isSessionConsidering(camp.id,i);
+          const planned=isSessionPlanned(camp.id,i);
+          if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${i})"><span class="sess-label">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
+          if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${i})"><span class="sess-label">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${i})">✕</button></span></li>`;
+          return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${i})"><span class="sess-label">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}</span><span class="sess-action">+ Consider</span></li>`;
+        }).join('')
+      }</ul></div>`;
+    } else {
+      const dayWeeks=getDayCampWeeks(camp);
+      if(dayWeeks.length) {
+        sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">Weekly Schedule</div><ul class="sessions-list">${
+          dayWeeks.map(w=>{
+            const considering=isDayWeekConsidering(camp.id,w.mon);
+            const planned=isDayWeekPlanned(camp.id,w.mon);
+            if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeDayWeekFromPlanned('${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
+            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteDayWeekToPlanned(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeDayWeekFromConsider(${camp.id},'${w.mon}')">✕</button></span></li>`;
+            return `<li onclick="event.stopPropagation();addDayWeekToConsider(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">+ Consider</span></li>`;
+          }).join('')
+        }</ul></div>`;
+      }
+    }
+    const expandSection = isExp ? `<div class="card-expand" style="display:flex;justify-content:space-between;align-items:center">
+      ${camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Visit Website →</a>` : '<span></span>'}
+      ${camp.custom ? `<div style="display:flex;gap:.5rem">
+        <button class="btn btn-outline" style="font-size:.73rem;border-color:#94a3b8;color:#64748b" onclick="event.stopPropagation();openAddCampModal(${camp.id})">✏ Edit</button>
+        <button class="btn btn-outline" style="font-size:.73rem;border-color:var(--red);color:var(--red)" onclick="event.stopPropagation();deleteCustomCamp(${camp.id})">Delete</button>
+      </div>` : ''}
+    </div>` : '';
+    // Group friends indicator
+    let groupFriendsHtml = '';
+    if(S.group?.members?.length) {
+      const FRIEND_COLORS = ['#7c3aed','#059669','#d97706','#dc2626','#0891b2','#be185d'];
+      const indicators = [];
+      S.group.members.forEach((member, mi) => {
+        const pd2 = member.planData;
+        if(!pd2) return;
+        const allKidsData = pd2.kids || [];
+        const color = FRIEND_COLORS[mi % FRIEND_COLORS.length];
+        // Find weeks where this friend has this camp planned or considering
+        const planned = [], considering = [];
+        WEEKS.forEach((w, wi) => {
+          allKidsData.forEach(k => {
+            const isPlanned = k.planned && (
+              camp.sleep
+                ? Object.values(k.planned).some(e => e.campId === camp.id)
+                : k.planned[w.mon]?.campId === camp.id
+            );
+            if(isPlanned && !planned.includes(`W${wi+1}`)) planned.push(`W${wi+1}`);
+            const isConsidering = k.consider && (k.consider[w.mon]||[]).some(e => e.campId === camp.id);
+            if(isConsidering && !considering.includes(`W${wi+1}`)) considering.push(`W${wi+1}`);
+          });
+        });
+        // De-dup: remove considering weeks already in planned
+        const considerOnly = considering.filter(w => !planned.includes(w));
+        if(planned.length || considerOnly.length) {
+          let parts = [];
+          if(planned.length) parts.push(`<strong style="color:${color}">${member.displayName}</strong> → ${planned.join(', ')}`);
+          if(considerOnly.length) parts.push(`<strong style="color:${color}">${member.displayName}</strong> → ${considerOnly.join(', ')} <em style="color:#94a3b8">considering</em>`);
+          indicators.push(...parts);
+        }
+      });
+      if(indicators.length) {
+        groupFriendsHtml = `<div class="group-friends">👥 ${indicators.join(' · ')}</div>`;
+      }
+    }
+
+    return `<div class="card${isExp?' expanded':''}" onclick="toggleCard(${camp.id})">
+      <div class="card-bar" style="background:${camp.color}"></div>
+      <div class="card-body">
+        <div class="card-top">
+          <div class="card-name">${camp.name}</div>
+          <div class="badges">
+            ${camp.custom ? '<span class="badge badge-custom">Custom</span>' : ''}
+            <span class="badge ${camp.sleep?'badge-sleep':'badge-day'}">${camp.sleep?'Sleepaway':'Day'}</span>
+            <span class="badge badge-type">${camp.type}</span>
+            ${camp.custom ? '' : `<span class="badge ${camp.appRequired?'badge-apply':'badge-reg'}">${camp.appRequired?'✎ Apply':'✓ Register'}</span>`}
+          </div>
+          <span class="card-chevron">▼</span>
+        </div>
+        <p class="card-desc" style="${isExp?'-webkit-line-clamp:unset;overflow:visible':''}">${camp.desc}</p>
+        ${sessInfo}
+        ${verifiedBadge}
+        <div class="card-meta">
+          <span class="mk">Ages</span><span class="mv">${camp.ageMin}–${camp.ageMax}</span>
+          <span class="mk">Location</span><span class="mv">${camp.loc}</span>
+          ${camp.custom ? '' : `<span class="mk">Apply/info</span><span class="mv">${camp.apply}</span>`}
+        </div>
+        ${groupFriendsHtml}
+      </div>
+      ${isExp ? sessionsSection : ''}
+      <div class="card-foot">
+        <span class="cost">${camp.cost}</span>
+        ${btn}
+      </div>
+      ${expandSection}
+    </div>`;
+  }).join('');
+}
+
+// ── Kid rows in settings (dynamic) ───────────────────────────────────────
+function renderKidRows() {
+  const el = document.getElementById('kidRows');
+  el.innerHTML = S.kids.map((k, i) => {
+    const color = KID_COLORS[i];
+    const ageOpts = `<option value="">Any age</option>` +
+      Array.from({length:15},(_,j)=>`<option value="${j+4}"${k.age==j+4?' selected':''}>Age ${j+4}</option>`).join('');
+    return `<div class="kid-row" style="--kid-color:${color}">
+      <div class="sg"><label>Kid ${i+1} name</label>
+        <input type="text" value="${k.name.replace(/"/g,'&quot;')}"
+          oninput="S.kids[${i}].name=this.value||'Kid ${i+1}';renderAll()" /></div>
+      <div class="sg"><label>Last day of school</label>
+        <input type="date" value="${k.lastDay}"
+          onchange="S.kids[${i}].lastDay=this.value;S.selWeek=null;S.kids[${i}].consider={};S.kids[${i}].planned={};renderAll()" /></div>
+      <div class="sg"><label>First day of school</label>
+        <input type="date" value="${k.firstDay}"
+          onchange="S.kids[${i}].firstDay=this.value;S.selWeek=null;S.kids[${i}].consider={};S.kids[${i}].planned={};renderAll()" /></div>
+      <div class="sg"><label>Age</label>
+        <select onchange="S.kids[${i}].age=this.value;renderAll()">${ageOpts}</select></div>
+    </div>`;
+  }).join('');
+}
+
+function setKidCount(n) {
+  const cur = S.kids.length;
+  if(n === cur) return;
+  if(n < cur) {
+    const hasPlans = S.kids.slice(n).some(k =>
+      Object.keys(k.planned).length>0 || Object.keys(k.consider).length>0);
+    if(hasPlans && !confirm(`Remove Kid ${cur} and clear their plans?`)) return;
+    S.kids = S.kids.slice(0, n);
+  } else {
+    for(let i=cur; i<n; i++)
+      S.kids.push({name:`Kid ${i+1}`,lastDay:'2026-06-03',firstDay:'2026-08-17',age:'',consider:{},planned:{}});
+  }
+  if(S.activeKid >= S.kids.length) S.activeKid = S.kids.length-1;
+  document.querySelectorAll('#kidCountToggle .tgl').forEach((btn,i) =>
+    btn.classList.toggle('active', i+1===n));
+  renderKidRows();
+  updatePanelWidth();
+  renderAll();
+}
+
+function updatePanelWidth() {
+  const widths = [340, 420, 510, 590];
+  document.querySelector('main').style.gridTemplateColumns =
+    `${widths[S.kids.length-1]}px 1fr`;
+}
+
+// ── Custom camp modal ─────────────────────────────────────────────────────
+let _editingCampId = null;
+let _campStyle = 'day';
+let _adminCampMode = false;
+
+function openAddCampModal(editId) {
+  _editingCampId = editId ?? null;
+  const isEdit = editId !== null && editId !== undefined;
+  const adminLabel = _adminCampMode ? ' (Admin)' : '';
+  document.getElementById('addCampModalTitle').textContent = isEdit ? `Edit Camp${adminLabel}` : (_adminCampMode ? 'Add Camp' : 'Add Custom Camp');
+  document.getElementById('cc_submit').textContent = isEdit ? 'Save Changes' : (_adminCampMode ? 'Save to Database' : 'Add Camp');
+  document.getElementById('cc_msg').textContent = '';
+  if(isEdit) {
+    const c = _adminCampMode ? CAMPS.find(x=>x.id===editId) : S.customCamps.find(x=>x.id===editId);
+    if(!c) return;
+    document.getElementById('cc_name').value = c.name;
+    document.getElementById('cc_url').value = c.url || '';
+    document.getElementById('cc_type').value = c.type || 'Other';
+    document.getElementById('cc_age_min').value = c.ageMin || 5;
+    document.getElementById('cc_age_max').value = c.ageMax || 15;
+    document.getElementById('cc_cost').value = c.cost || '';
+    document.getElementById('cc_loc').value = c.loc || '';
+    document.getElementById('cc_desc').value = c.desc || '';
+    document.getElementById('cc_all_summer').checked = !c.range;
+    document.getElementById('cc_date_start').value = c.range?.s || '';
+    document.getElementById('cc_date_end').value = c.range?.e || '';
+    setCampStyle(c.sleep ? 'sleep' : 'day');
+  } else {
+    document.getElementById('cc_name').value = '';
+    document.getElementById('cc_url').value = '';
+    document.getElementById('cc_type').value = 'STEM';
+    document.getElementById('cc_age_min').value = '5';
+    document.getElementById('cc_age_max').value = '15';
+    document.getElementById('cc_cost').value = '';
+    document.getElementById('cc_loc').value = '';
+    document.getElementById('cc_desc').value = '';
+    document.getElementById('cc_all_summer').checked = true;
+    document.getElementById('cc_date_start').value = '';
+    document.getElementById('cc_date_end').value = '';
+    setCampStyle('day');
+  }
+  toggleCampDateRange();
+  document.getElementById('addCampModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('cc_name').focus(), 50);
+}
+function closeAddCampModal() {
+  document.getElementById('addCampModal').style.display = 'none';
+  _editingCampId = null;
+  _adminCampMode = false;
+}
+function setCampStyle(style) {
+  _campStyle = style;
+  document.getElementById('cc_day_btn').classList.toggle('active', style==='day');
+  document.getElementById('cc_sleep_btn').classList.toggle('active', style==='sleep');
+}
+function toggleCampDateRange() {
+  const allSummer = document.getElementById('cc_all_summer').checked;
+  document.getElementById('cc_dates_row').style.display = allSummer ? 'none' : 'flex';
+}
+function submitCustomCamp() {
+  const name = document.getElementById('cc_name').value.trim();
+  if(!name) { document.getElementById('cc_msg').textContent = 'Camp name is required.'; return; }
+  const allSummer = document.getElementById('cc_all_summer').checked;
+  let range = null;
+  if(!allSummer) {
+    const s = document.getElementById('cc_date_start').value;
+    const e = document.getElementById('cc_date_end').value;
+    if(!s || !e) { document.getElementById('cc_msg').textContent = 'Enter both start and end dates, or choose "Available all summer".'; return; }
+    range = { s, e };
+  }
+  const isEdit = _editingCampId !== null;
+  const existingColor = isEdit
+    ? (_adminCampMode ? CAMPS.find(c=>c.id===_editingCampId)?.color : S.customCamps.find(c=>c.id===_editingCampId)?.color)
+    : null;
+  const camp = {
+    id: isEdit ? _editingCampId : (_adminCampMode ? null : -Date.now()),
+    name,
+    type: document.getElementById('cc_type').value,
+    sleep: _campStyle === 'sleep',
+    verified: false, appRequired: false,
+    desc: document.getElementById('cc_desc').value.trim(),
+    ageMin: parseInt(document.getElementById('cc_age_min').value) || 4,
+    ageMax: parseInt(document.getElementById('cc_age_max').value) || 17,
+    range,
+    apply: '', cost: document.getElementById('cc_cost').value.trim() || 'See website', costN: 0,
+    loc: document.getElementById('cc_loc').value.trim(),
+    url: document.getElementById('cc_url').value.trim(),
+    color: existingColor || CUSTOM_COLORS[S.customCamps.length % CUSTOM_COLORS.length],
+    custom: !_adminCampMode
+  };
+  if(_adminCampMode) {
+    saveAdminCamp(camp);
+    return;
+  }
+  if(isEdit) {
+    const idx = S.customCamps.findIndex(c=>c.id===_editingCampId);
+    if(idx >= 0) S.customCamps[idx] = camp;
+  } else {
+    S.customCamps.push(camp);
+  }
+  closeAddCampModal();
+  renderAll();
+}
+function deleteCustomCamp(id) {
+  if(!confirm('Remove this custom camp and clear it from all plans?')) return;
+  S.kids.forEach(k => {
+    Object.keys(k.consider).forEach(mon => {
+      k.consider[mon] = k.consider[mon].filter(e => e.campId !== id);
+      if(!k.consider[mon].length) delete k.consider[mon];
+    });
+    Object.keys(k.planned).forEach(mon => {
+      if(k.planned[mon].campId === id) delete k.planned[mon];
+    });
+  });
+  S.customCamps = S.customCamps.filter(c => c.id !== id);
+  renderAll();
+}
+
+// ── Admin camp management ─────────────────────────────────────────────────
+function openAdminCampsModal() {
+  document.getElementById('adminCampsModal').style.display = 'flex';
+  renderAdminCampsList();
+}
+function closeAdminCampsModal() {
+  document.getElementById('adminCampsModal').style.display = 'none';
+}
+function renderAdminCampsList() {
+  const el = document.getElementById('adminCampsList');
+  if(!el) return;
+  if(!CAMPS.length) {
+    el.innerHTML = '<p style="padding:.75rem;font-size:.85rem;color:var(--muted)">No camps loaded.</p>';
+    return;
+  }
+  el.innerHTML = CAMPS.map(c => `
+    <div style="display:flex;align-items:center;gap:.6rem;padding:.55rem .4rem;border-bottom:1px solid var(--border)">
+      <div style="width:6px;height:6px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.84rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+        <div style="font-size:.72rem;color:var(--muted)">${c.type} · ${c.sleep?'Sleepaway':'Day'} · ID ${c.id}</div>
+      </div>
+      <button class="btn btn-outline" style="padding:.18rem .45rem;font-size:.71rem;flex-shrink:0"
+        onclick="openAdminEditCamp(${c.id})">Edit</button>
+      <button class="btn btn-outline" style="padding:.18rem .45rem;font-size:.71rem;flex-shrink:0;border-color:var(--red);color:var(--red)"
+        onclick="deactivateCamp(${c.id})">Deactivate</button>
+    </div>`).join('');
+}
+function openAdminAddCamp() {
+  _adminCampMode = true;
+  closeAdminCampsModal();
+  openAddCampModal(null);
+}
+function openAdminEditCamp(id) {
+  _adminCampMode = true;
+  closeAdminCampsModal();
+  openAddCampModal(id);
+}
+async function deactivateCamp(id) {
+  if(!confirm('Deactivate this camp? It will be hidden from all users until reactivated.')) return;
+  await sb.from('camps').update({ active: false }).eq('id', id);
+  await loadCamps();
+  openAdminCampsModal();
+}
+async function saveAdminCamp(camp) {
+  const btn = document.getElementById('cc_submit');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  const row = {
+    ...(camp.id ? { id: camp.id } : {}),
+    name: camp.name, type: camp.type, sleep: camp.sleep,
+    app_required: camp.appRequired || false,
+    description: camp.desc || null,
+    age_min: camp.ageMin, age_max: camp.ageMax,
+    sessions: camp.sessions || [],
+    apply_info: camp.apply || null,
+    cost: camp.cost, cost_n: camp.costN || 0,
+    location: camp.loc || null, url: camp.url || null,
+    color: camp.color || '#0369a1',
+    date_range: camp.range || null,
+    active: true,
+  };
+  const { error } = await sb.from('camps').upsert(row, { onConflict: 'id' });
+  if(error) {
+    document.getElementById('cc_msg').textContent = 'Save failed: ' + error.message;
+    btn.disabled = false;
+    btn.textContent = 'Save to Database';
+    return;
+  }
+  closeAddCampModal();
+  await loadCamps();
+  openAdminCampsModal();
+}
+
+// ── Map view ──────────────────────────────────────────────────────────────
+const COORDS = {
+  // SF day camps
+  1:[37.8686,-122.5054], 2:[37.7672,-122.4508], 3:[37.7694,-122.4862],
+  4:[37.7680,-122.3916], 5:[37.7614,-122.4103], 6:[37.7759,-122.4203],
+  7:[37.7749,-122.4194], 8:[37.7605,-122.4610], 9:[37.7760,-122.4150],
+  10:[37.7083,-122.4415],11:[37.7857,-122.4011],12:[37.7730,-122.4180],
+  // Sleepaway - Northern CA
+  13:[37.8833,-120.0500],14:[37.1158,-119.2908],15:[39.2613,-121.0155],
+  16:[39.6888,-123.4833],17:[38.4405,-122.7144],18:[37.0516,-122.0183],
+  19:[37.0416,-122.0283],20:[38.5546,-123.0775],21:[37.4275,-122.1697],
+  22:[39.3208,-123.4033],
+  // National math camps
+  23:[34.1037,-117.7120], // Mathcamp (Harvey Mudd — location varies)
+  24:[39.9986,-83.0154],  // Ross — Ohio State
+  25:[42.3505,-71.1054],  // PROMYS — Boston University
+  26:[37.4252,-122.1680], // SUMaC — Stanford
+  27:[32.8801,-117.2340], // AwesomeMath — UC San Diego
+  28:[38.9356,-77.0878],  // MathPath (American Univ — location varies)
+  29:[42.3242,-72.5218],  // HCSSiM — Hampshire College
+  30:[40.0194,-75.3152],  // MathILy — Bryn Mawr
+};
+// Camps whose location rotates yearly
+const VARIES_LOCATION = new Set([23, 28]);
+
+let _map = null;
+let _mapMarkers = [];
+
+function setMapView(toMap) {
+  S.mapView = toMap;
+  document.getElementById('viewListBtn').classList.toggle('active', !toMap);
+  document.getElementById('viewMapBtn').classList.toggle('active', toMap);
+  renderAll();
+}
+
+function renderMap(filtered) {
+  const el = document.getElementById('campMap');
+  if(!_map) {
+    _map = L.map('campMap').setView([37.7749, -122.4194], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(_map);
+  }
+  _mapMarkers.forEach(m => m.remove());
+  _mapMarkers = [];
+
+  const pts = [];
+  const missing = [];
+  const fri = S.selWeek ? iso(addD(pd(S.selWeek),4)) : null;
+
+  filtered.forEach(camp => {
+    const c = camp.custom ? null : COORDS[camp.id];
+    if(!c) { if(camp.custom) missing.push(camp.name); return; }
+
+    const marker = L.circleMarker(c, {
+      radius: 9, fillColor: camp.color, color: '#fff',
+      weight: 2, opacity: 1, fillOpacity: .88
+    });
+
+    const avail = S.selWeek ? campAvail(camp, S.selWeek, fri) : true;
+    const sIdx = S.selWeek && camp.sleep ? getSessIdx(camp, S.selWeek, fri) : -1;
+    const variesNote = VARIES_LOCATION.has(camp.id)
+      ? `<div style="font-size:.68rem;color:#f59e0b;margin-bottom:5px">⚠ Location varies by year — pin is approximate</div>` : '';
+    const actionBtn = S.selWeek
+      ? (avail
+          ? `<button onclick="addToPlan(${camp.id},${sIdx})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Consider for ${S.kids[S.activeKid].name}</button>`
+          : `<div style="margin-top:6px;font-size:.72rem;color:#94a3b8">Not available this week</div>`)
+      : (camp.url ? `<a href="${camp.url}" target="_blank" style="display:inline-block;margin-top:7px;font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Website →</a>` : '');
+
+    marker.bindPopup(`<div style="min-width:185px">
+      <div style="height:3px;background:${camp.color};margin:-2px -12px 8px;border-radius:2px 2px 0 0"></div>
+      <div style="font-size:.84rem;font-weight:700;line-height:1.3;margin-bottom:3px">${camp.name}</div>
+      <div style="font-size:.71rem;color:#64748b;margin-bottom:2px">${camp.sleep?'Sleepaway':'Day'} · ${camp.type}</div>
+      <div style="font-size:.71rem;color:#64748b;margin-bottom:5px">Ages ${camp.ageMin}–${camp.ageMax} · ${camp.cost}</div>
+      ${camp.loc ? `<div style="font-size:.68rem;color:#94a3b8;margin-bottom:4px">${camp.loc}</div>` : ''}
+      ${variesNote}${actionBtn}
+    </div>`, { maxWidth: 240 });
+
+    marker.addTo(_map);
+    _mapMarkers.push(marker);
+    pts.push(c);
+  });
+
+  if(pts.length === 1) _map.setView(pts[0], 13);
+  else if(pts.length > 1) _map.fitBounds(pts, { padding: [50, 50] });
+
+  setTimeout(() => _map.invalidateSize(), 80);
+
+  // Note about unmapped custom camps
+  let note = document.getElementById('mapNote');
+  if(!note) {
+    note = document.createElement('div');
+    note.id = 'mapNote';
+    note.style.cssText = 'position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(255,255,255,.93);border:1px solid var(--border);border-radius:8px;padding:.35rem .85rem;font-size:.72rem;color:var(--muted);pointer-events:none;white-space:nowrap';
+    el.style.position = 'relative';
+    el.appendChild(note);
+  }
+  note.style.display = missing.length ? 'block' : 'none';
+  if(missing.length) note.textContent = `${missing.length} custom camp${missing.length>1?'s':''} not shown on map (no coordinates)`;
+}
+
+// ── A/B admin panel ───────────────────────────────────────────────────────
+function handleTitleClick() {
+  _adminClicks++;
+  if(_adminClicks >= 5) { _adminClicks = 0; showAdmin(); return; }
+  clearTimeout(handleTitleClick._t);
+  handleTitleClick._t = setTimeout(() => { _adminClicks = 0; }, 2000);
+}
+async function showAdmin() {
+  document.getElementById('adminPanel').style.display = 'flex';
+  const el = document.getElementById('adminContent');
+  el.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
+  const { data, error } = await sb.rpc('get_ab_results');
+  if(error) { el.innerHTML = `<p style="color:var(--red)">${error.message}</p>`; return; }
+  if(!data?.length) { el.innerHTML = '<p>No data yet.</p>'; return; }
+  const rows = data.map(r => `<tr>
+    <td style="padding:.5rem .75rem;font-weight:700">Variant ${r.variant}</td>
+    <td style="padding:.5rem .75rem;text-align:right">${r.users}</td>
+    <td style="padding:.5rem .75rem;text-align:right">${r.converted} (${r.users>0?Math.round(r.converted/r.users*100):0}%)</td>
+    <td style="padding:.5rem .75rem;text-align:right">${r.avg_minutes!=null?r.avg_minutes+' min':'—'}</td>
+  </tr>`).join('');
+  el.innerHTML = `<p style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem;line-height:1.6">
+    <strong>A</strong> = current layout &nbsp;·&nbsp; <strong>B</strong> = kid names above columns<br>
+    "Converted" = added ≥1 planned camp &nbsp;·&nbsp; Your variant: <strong>${S.variant||'—'}</strong>
+  </p>
+  <table style="width:100%;border-collapse:collapse;font-size:.85rem;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <thead><tr style="background:#f4f8fb">
+      <th style="padding:.5rem .75rem;text-align:left;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Variant</th>
+      <th style="padding:.5rem .75rem;text-align:right;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Users</th>
+      <th style="padding:.5rem .75rem;text-align:right;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Converted</th>
+      <th style="padding:.5rem .75rem;text-align:right;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Avg time to plan</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+function closeAdmin() {
+  document.getElementById('adminPanel').style.display = 'none';
+}
+
+function renderAll() {
+  WEEKS = genAllWeeks();
+  renderSummary(); renderWeeks(); renderCamps();
+  scheduleSave();
+}
+
+function selWeek(mon) { S.selWeek=S.selWeek===mon?null:mon; renderAll(); }
+function selWeekKid(mon, kidIdx) {
+  if(S.selWeek===mon && S.activeKid===kidIdx) { S.selWeek=null; }
+  else { S.selWeek=mon; S.activeKid=kidIdx; }
+  renderAll();
+}
+function setActiveKid(kidIdx) { S.activeKid=kidIdx; renderAll(); }
+function toggleCard(id) { S.expandCard=S.expandCard===id?null:id; renderCamps(); }
+
+// ── Event listeners ───────────────────────────────────────────────────────
+document.querySelectorAll('.tgl[data-sl]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tgl[data-sl]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); S.slFilter=b.dataset.sl; renderAll();
+}));
+document.querySelectorAll('.tgl[data-app]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tgl[data-app]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); S.appFilter=b.dataset.app; renderAll();
+}));
+document.getElementById('actFilter').addEventListener('change', e=>{ S.actFilter=e.target.value; renderAll(); });
+document.getElementById('campSearch').addEventListener('input', e=>{ S.q=e.target.value; renderAll(); });
+
+renderKidRows();
+updatePanelWidth();
+
+// ── Supabase auth & persistence ───────────────────────────────────────────
+const { createClient } = supabase;
+const sb = createClient(
+  'https://qdtgylkhksqwecocbklq.supabase.co',
+  'sb_publishable_gUGUwEktFMs5z4vjay-8xQ_5rU_gPZW'
+);
+
+let currentUser = null;
+let _loading = false;
+let _saveTimer = null;
+let _authMode = 'signin';
+let _planCreatedAt = null;
+let _firstPlanAt = null;
+let _adminClicks = 0;
+let _campsLoaded = false;
+let _isAdmin = false;
+
+loadCamps(); // public table — no auth required
+
+async function loadCamps() {
+  const { data } = await sb.from('camps')
+    .select('*').eq('active', true).order('name');
+  if (data) {
+    CAMPS = data.map(row => ({
+      id:          row.id,
+      name:        row.name,
+      type:        row.type,
+      sleep:       row.sleep,
+      verified:    row.verified,
+      appRequired: row.app_required,
+      desc:        row.description,
+      ageMin:      row.age_min,
+      ageMax:      row.age_max,
+      sessions:    row.sessions || [],
+      apply:       row.apply_info,
+      cost:        row.cost,
+      costN:       row.cost_n,
+      loc:         row.location,
+      url:         row.url,
+      color:       row.color,
+      range:       row.date_range || null,
+      comingSoon:  row.coming_soon || false,
+    }));
+  }
+  _campsLoaded = true;
+  renderAll();
+}
+
+sb.auth.onAuthStateChange((event, session) => {
+  currentUser = session?.user ?? null;
+  if(currentUser) {
+    document.getElementById('authModal').style.display = 'none';
+    document.getElementById('userBar').style.display = 'flex';
+    document.getElementById('userEmail').textContent = currentUser.email;
+    loadPlan();
+  } else {
+    document.getElementById('authModal').style.display = 'flex';
+    document.getElementById('userBar').style.display = 'none';
+  }
+});
+
+function switchTab(mode) {
+  _authMode = mode;
+  document.getElementById('tabSignin').classList.toggle('active', mode==='signin');
+  document.getElementById('tabSignup').classList.toggle('active', mode==='signup');
+  document.getElementById('authSubmit').textContent = mode==='signin' ? 'Sign in' : 'Create account';
+  document.getElementById('authPassword').autocomplete = mode==='signin' ? 'current-password' : 'new-password';
+  setAuthMsg('');
+}
+
+function setAuthMsg(msg, type='error') {
+  const el = document.getElementById('authMsg');
+  el.textContent = msg;
+  el.className = `auth-msg ${type}`;
+}
+
+async function handleAuth() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const btn = document.getElementById('authSubmit');
+  if(!email || !password) { setAuthMsg('Enter your email and password.'); return; }
+  btn.disabled = true;
+  setAuthMsg('');
+  if(_authMode === 'signin') {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) { setAuthMsg(error.message); btn.disabled = false; }
+  } else {
+    const { error } = await sb.auth.signUp({ email, password });
+    if(error) { setAuthMsg(error.message); btn.disabled = false; }
+    else { setAuthMsg('Check your email to confirm your account, then sign in.', 'info'); btn.disabled = false; }
+  }
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+}
+
+function _applyPlanData(planData) {
+  if(planData?.customCamps) S.customCamps = planData.customCamps;
+  if(planData?.vacation) S.vacation = planData.vacation;
+  if(planData?.kids) {
+    S.kids = planData.kids;
+    if(S.activeKid >= S.kids.length) S.activeKid = S.kids.length-1;
+    document.querySelectorAll('#kidCountToggle .tgl').forEach((btn,i) =>
+      btn.classList.toggle('active', i+1===S.kids.length));
+    renderKidRows();
+    updatePanelWidth();
+  }
+}
+
+async function loadPlan() {
+  _loading = true;
+  S.household = null;
+  S.group = null;
+
+  // Check household membership
+  const { data: hm } = await sb.from('household_members')
+    .select('household_id, households(id, owner_id)')
+    .eq('user_id', currentUser.id).maybeSingle();
+
+  if(hm) {
+    S.household = {
+      id: hm.household_id,
+      ownerId: hm.households.owner_id,
+      isOwner: hm.households.owner_id === currentUser.id
+    };
+    const { data: hp } = await sb.from('household_plans')
+      .select('plan_data').eq('household_id', hm.household_id).maybeSingle();
+    if(hp?.plan_data) _applyPlanData(hp.plan_data);
+    S.variant = S.variant || (Math.random() < 0.5 ? 'A' : 'B');
+    if(!_planCreatedAt) _planCreatedAt = new Date().toISOString();
+  } else {
+    // Solo plan load
+    const { data } = await sb.from('plans')
+      .select('plan_data, variant, plan_created_at, first_plan_at')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if(data) {
+      S.variant = data.variant || (Math.random() < 0.5 ? 'A' : 'B');
+      _planCreatedAt = data.plan_created_at;
+      _firstPlanAt = data.first_plan_at;
+      _applyPlanData(data.plan_data);
+    } else {
+      S.variant = Math.random() < 0.5 ? 'A' : 'B';
+      _planCreatedAt = new Date().toISOString();
+      _firstPlanAt = null;
+    }
+  }
+
+  // Check group membership
+  const { data: gm } = await sb.from('group_members')
+    .select('group_id, display_name, camp_groups(id, name, invite_code)')
+    .eq('user_id', currentUser.id).maybeSingle();
+  if(gm) {
+    S.group = {
+      id: gm.group_id,
+      name: gm.camp_groups.name,
+      inviteCode: gm.camp_groups.invite_code,
+      members: []
+    };
+    loadGroupPlans(); // async, will re-render when done
+  }
+
+  // Process pending invite if any
+  if(_pendingInvite) {
+    const token = _pendingInvite;
+    _pendingInvite = null;
+    processPendingInvite(token);
+  }
+
+  const { data: adminRow } = await sb.from('admins')
+    .select('user_id').eq('user_id', currentUser.id).maybeSingle();
+  _isAdmin = !!adminRow;
+
+  renderAll();
+  renderCollabArea();
+  _loading = false;
+}
+
+function scheduleSave() {
+  if(!currentUser || _loading) return;
+  clearTimeout(_saveTimer);
+  setSaveDot('Saving…');
+  _saveTimer = setTimeout(savePlan, 1200);
+}
+
+async function savePlan() {
+  if(!currentUser) return;
+  if(!_planCreatedAt) _planCreatedAt = new Date().toISOString();
+  const planData = { kids: S.kids, customCamps: S.customCamps, vacation: S.vacation };
+
+  if(S.household) {
+    const { error } = await sb.from('household_plans').upsert({
+      household_id: S.household.id,
+      plan_data: planData,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'household_id' });
+    if(error) { setSaveDot('Save failed ✕'); return; }
+  } else {
+    const hasAnyPlanned = S.kids.some(k => Object.keys(k.planned).length > 0);
+    if(hasAnyPlanned && !_firstPlanAt) _firstPlanAt = new Date().toISOString();
+    const { error } = await sb.from('plans').upsert({
+      user_id: currentUser.id,
+      plan_data: planData,
+      variant: S.variant,
+      plan_created_at: _planCreatedAt,
+      first_plan_at: _firstPlanAt,
+      updated_at: new Date().toISOString()
+    });
+    if(error) { setSaveDot('Save failed ✕'); return; }
+  }
+
+  setSaveDot('Saved ✓');
+  setTimeout(() => setSaveDot(''), 2000);
+}
+
+function setSaveDot(msg) {
+  const el = document.getElementById('saveDot');
+  if(el) el.textContent = msg;
+}
+
+// ── Collab area rendering ─────────────────────────────────────────────────
+let _collabMenuOpen = false;
+function renderCollabArea() {
+  const el = document.getElementById('collabArea');
+  if(!el) return;
+  const adminBtn = _isAdmin
+    ? `<button class="collab-pill" style="background:rgba(255,255,255,.18);margin-right:.35rem" onclick="openAdminCampsModal()">⚙ Camps</button>`
+    : '';
+  if(S.household) {
+    el.innerHTML = adminBtn + `<button class="collab-pill" onclick="openHouseholdManage()"><span class="dot"></span> Shared plan</button>`;
+  } else if(S.group) {
+    el.innerHTML = adminBtn + `<button class="collab-pill" onclick="openGroupManage()">👥 ${S.group.name}</button>`;
+  } else {
+    el.innerHTML = adminBtn + `<div style="position:relative">
+      <button class="collab-pill" id="collabMenuBtn" onclick="toggleCollabMenu()">👥 Share ▾</button>
+      <div class="collab-menu" id="collabMenu" style="display:none">
+        <button onclick="closeCollabMenu();invitePartner()">Invite partner (shared plan)</button>
+        <div class="cm-divider"></div>
+        <button onclick="closeCollabMenu();openGroupCreate()">Create friend group</button>
+        <button onclick="closeCollabMenu();openGroupJoin()">Join friend group</button>
+      </div>
+    </div>`;
+  }
+}
+function toggleCollabMenu() {
+  const m = document.getElementById('collabMenu');
+  if(!m) return;
+  const open = m.style.display !== 'none';
+  m.style.display = open ? 'none' : 'block';
+  if(!open) {
+    setTimeout(() => document.addEventListener('click', _closeCollabOnOutside, {once:true}), 0);
+  }
+}
+function _closeCollabOnOutside(e) {
+  const m = document.getElementById('collabMenu');
+  const btn = document.getElementById('collabMenuBtn');
+  if(m && !m.contains(e.target) && e.target !== btn) m.style.display = 'none';
+}
+function closeCollabMenu() {
+  const m = document.getElementById('collabMenu'); if(m) m.style.display='none';
+}
+
+// ── Household: invite partner ──────────────────────────────────────────────
+async function invitePartner() {
+  if(!currentUser) return;
+  document.getElementById('hhModalTitle').textContent = 'Invite Partner';
+  const content = document.getElementById('hhModalContent');
+  content.innerHTML = `<p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Creating your shared household plan…</p>`;
+  document.getElementById('householdModal').style.display = 'flex';
+
+  // Create household
+  const { data: hh, error: hhErr } = await sb.from('households')
+    .insert({ owner_id: currentUser.id }).select('id').single();
+  if(hhErr) { content.innerHTML=`<p style="color:var(--red);font-size:.85rem">Error: ${hhErr.message}</p>`; return; }
+
+  // Add self to household_members
+  await sb.from('household_members').insert({ household_id: hh.id, user_id: currentUser.id });
+
+  // Migrate current solo plan to household_plans
+  const planData = { kids: S.kids, customCamps: S.customCamps, vacation: S.vacation };
+  await sb.from('household_plans').insert({ household_id: hh.id, plan_data: planData });
+
+  // Update local state
+  S.household = { id: hh.id, ownerId: currentUser.id, isOwner: true };
+  renderCollabArea();
+
+  // Create invite token
+  const { data: inv, error: invErr } = await sb.from('household_invites')
+    .insert({ household_id: hh.id }).select('token').single();
+  if(invErr) { content.innerHTML=`<p style="color:var(--red);font-size:.85rem">Household created but invite failed: ${invErr.message}</p>`; return; }
+
+  const link = `${location.origin}${location.pathname}?invite=${inv.token}`;
+  content.innerHTML = `
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem">Share this link with your partner. When they open it and log in, they'll join your shared plan.</p>
+    <div class="invite-link-box">
+      <input type="text" id="inviteLinkInput" value="${link}" readonly onclick="this.select()" />
+      <button class="btn btn-solid" style="flex-shrink:0;white-space:nowrap" onclick="copyInviteLink()">Copy</button>
+    </div>
+    <p id="copyMsg" style="font-size:.75rem;color:var(--green);min-height:1.1em;margin-top:.2rem"></p>
+    <p style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Both of you will read and write from the same plan (last save wins).</p>
+    <div style="display:flex;justify-content:flex-end;margin-top:1.25rem">
+      <button class="btn btn-outline" onclick="closeHouseholdModal()">Done</button>
+    </div>`;
+}
+
+function copyInviteLink() {
+  const inp = document.getElementById('inviteLinkInput');
+  if(!inp) return;
+  inp.select();
+  navigator.clipboard.writeText(inp.value).then(() => {
+    const msg = document.getElementById('copyMsg');
+    if(msg) { msg.textContent = '✓ Link copied!'; setTimeout(()=>msg.textContent='',2500); }
+  });
+}
+
+// ── Household: process pending invite ─────────────────────────────────────
+async function processPendingInvite(token) {
+  if(!currentUser || !token) return;
+  // Fetch invite
+  const { data: inv } = await sb.from('household_invites')
+    .select('id, household_id, accepted_at, households(id, owner_id)')
+    .eq('token', token).maybeSingle();
+  if(!inv) { showInviteError('This invite link is invalid or has expired.'); return; }
+  if(inv.accepted_at) { showInviteError('This invite link has already been used.'); return; }
+  if(inv.household_id === S.household?.id) { showInviteError('You are already in this shared plan.'); return; }
+
+  // Show join confirmation
+  document.getElementById('hhModalTitle').textContent = 'Join Shared Plan';
+  const content = document.getElementById('hhModalContent');
+  content.innerHTML = `
+    <p style="font-size:.88rem;margin-bottom:1.25rem">You've been invited to join a shared summer camp plan.<br><br>
+    <strong>Your current plan will be replaced by the shared plan.</strong> Are you sure?</p>
+    <div style="display:flex;justify-content:flex-end;gap:.75rem">
+      <button class="btn btn-outline" onclick="closeHouseholdModal()">Cancel</button>
+      <button class="btn btn-solid" onclick="acceptHouseholdInvite('${inv.id}','${inv.household_id}')">Join shared plan</button>
+    </div>`;
+  document.getElementById('householdModal').style.display = 'flex';
+  // Clean URL
+  history.replaceState(null,'',location.pathname);
+}
+
+function showInviteError(msg) {
+  document.getElementById('hhModalTitle').textContent = 'Invalid Invite';
+  document.getElementById('hhModalContent').innerHTML =
+    `<p style="font-size:.85rem;color:var(--red);margin-bottom:1rem">${msg}</p>
+     <div style="display:flex;justify-content:flex-end"><button class="btn btn-outline" onclick="closeHouseholdModal()">Close</button></div>`;
+  document.getElementById('householdModal').style.display = 'flex';
+}
+
+async function acceptHouseholdInvite(inviteId, householdId) {
+  const content = document.getElementById('hhModalContent');
+  content.innerHTML = `<p style="font-size:.85rem;color:var(--muted)">Joining…</p>`;
+
+  // Join household
+  const { error: joinErr } = await sb.from('household_members')
+    .insert({ household_id: householdId, user_id: currentUser.id });
+  if(joinErr && !joinErr.message.includes('duplicate')) {
+    content.innerHTML=`<p style="color:var(--red);font-size:.85rem">Error joining: ${joinErr.message}</p>`; return;
+  }
+
+  // Mark invite accepted
+  await sb.from('household_invites').update({ accepted_at: new Date().toISOString() }).eq('id', inviteId);
+
+  // Fetch household info & shared plan
+  const { data: hh } = await sb.from('households').select('id, owner_id').eq('id', householdId).single();
+  S.household = { id: householdId, ownerId: hh.owner_id, isOwner: hh.owner_id === currentUser.id };
+  const { data: hp } = await sb.from('household_plans').select('plan_data').eq('household_id', householdId).maybeSingle();
+  if(hp?.plan_data) _applyPlanData(hp.plan_data);
+
+  renderAll();
+  renderCollabArea();
+  closeHouseholdModal();
+}
+
+// ── Household: manage modal ────────────────────────────────────────────────
+async function openHouseholdManage() {
+  document.getElementById('hhModalTitle').textContent = 'Shared Plan';
+  const content = document.getElementById('hhModalContent');
+  content.innerHTML = `<p style="font-size:.85rem;color:var(--muted)">Loading…</p>`;
+  document.getElementById('householdModal').style.display = 'flex';
+
+  const { data: members } = await sb.from('household_members')
+    .select('user_id').eq('household_id', S.household.id);
+
+  // Get emails via plans table (best effort)
+  const uids = (members||[]).map(m=>m.user_id);
+  const partnerUid = uids.find(uid => uid !== currentUser.id);
+
+  content.innerHTML = `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem">Members</div>
+      <ul class="member-list">
+        <li><span class="member-dot"></span> You (${currentUser.email})</li>
+        ${partnerUid ? `<li><span class="member-dot"></span> Partner</li>` : `<li style="color:var(--muted);font-style:italic">No partner joined yet</li>`}
+      </ul>
+    </div>
+    ${S.household.isOwner ? `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem">Invite link</div>
+      <button class="btn btn-outline" style="font-size:.8rem" onclick="regenerateInviteLink()">Generate new invite link</button>
+      <div id="newInviteLinkArea"></div>
+    </div>` : ''}
+    <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:.5rem;display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-outline" style="border-color:var(--red);color:var(--red);font-size:.8rem" onclick="leaveHousehold()">Disconnect from shared plan</button>
+      <button class="btn btn-outline" onclick="closeHouseholdModal()">Close</button>
+    </div>`;
+}
+
+async function regenerateInviteLink() {
+  const area = document.getElementById('newInviteLinkArea');
+  if(!area) return;
+  area.innerHTML = `<p style="font-size:.8rem;color:var(--muted);margin-top:.4rem">Generating…</p>`;
+  const { data: inv, error } = await sb.from('household_invites')
+    .insert({ household_id: S.household.id }).select('token').single();
+  if(error) { area.innerHTML=`<p style="color:var(--red);font-size:.8rem">${error.message}</p>`; return; }
+  const link = `${location.origin}${location.pathname}?invite=${inv.token}`;
+  area.innerHTML = `<div class="invite-link-box" style="margin-top:.5rem">
+    <input type="text" id="newInviteInput" value="${link}" readonly onclick="this.select()" style="flex:1;border:none;background:transparent;font-size:.75rem;color:var(--text);outline:none;font-family:monospace;min-width:0" />
+    <button class="btn btn-solid" style="flex-shrink:0;font-size:.75rem;padding:.3rem .6rem" onclick="navigator.clipboard.writeText(document.getElementById('newInviteInput').value)">Copy</button>
+  </div>`;
+}
+
+async function leaveHousehold() {
+  if(!confirm('Are you sure you want to disconnect from the shared plan? Your plan data will remain but you\'ll be on an independent copy.')) return;
+  await sb.from('household_members').delete().eq('household_id', S.household.id).eq('user_id', currentUser.id);
+  if(S.household.isOwner) {
+    await sb.from('households').delete().eq('id', S.household.id);
+  }
+  S.household = null;
+  closeHouseholdModal();
+  renderCollabArea();
+  // Save current state as solo plan
+  scheduleSave();
+}
+
+function closeHouseholdModal() {
+  document.getElementById('householdModal').style.display = 'none';
+}
+
+// ── Friend group: create ───────────────────────────────────────────────────
+function openGroupCreate() {
+  document.getElementById('grpModalTitle').textContent = 'Create Friend Group';
+  document.getElementById('grpModalContent').innerHTML = `
+    <div class="modal-field">
+      <label>Group name</label>
+      <input type="text" id="grpNameInput" placeholder="e.g. SF Moms 2026" autocomplete="off" />
+    </div>
+    <div class="modal-field">
+      <label>Your display name in the group</label>
+      <input type="text" id="grpDisplayInput" placeholder="e.g. Sarah" autocomplete="off" />
+    </div>
+    <div id="grpCreateMsg" style="font-size:.8rem;color:var(--red);min-height:1.2em;margin-bottom:.5rem"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.75rem">
+      <button class="btn btn-outline" onclick="closeGroupModal()">Cancel</button>
+      <button class="btn btn-solid" onclick="createGroup()">Create group</button>
+    </div>`;
+  document.getElementById('groupModal').style.display = 'flex';
+}
+
+async function createGroup() {
+  const name = document.getElementById('grpNameInput')?.value.trim();
+  const displayName = document.getElementById('grpDisplayInput')?.value.trim();
+  const msg = document.getElementById('grpCreateMsg');
+  if(!name) { if(msg) msg.textContent='Enter a group name.'; return; }
+  if(!displayName) { if(msg) msg.textContent='Enter your display name.'; return; }
+  if(msg) msg.textContent='';
+
+  const { data: grp, error: grpErr } = await sb.from('camp_groups')
+    .insert({ name, created_by: currentUser.id }).select('id, name, invite_code').single();
+  if(grpErr) { if(msg) msg.textContent=grpErr.message; return; }
+
+  const { error: memErr } = await sb.from('group_members')
+    .insert({ group_id: grp.id, user_id: currentUser.id, display_name: displayName });
+  if(memErr) { if(msg) msg.textContent=memErr.message; return; }
+
+  S.group = { id: grp.id, name: grp.name, inviteCode: grp.invite_code, members: [] };
+  renderCollabArea();
+
+  document.getElementById('grpModalTitle').textContent = grp.name;
+  document.getElementById('grpModalContent').innerHTML = `
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem">Share this code with friends so they can join your group:</p>
+    <div class="invite-code-box">${grp.invite_code}</div>
+    <p style="font-size:.78rem;color:var(--muted);margin:.4rem 0 1.25rem">Friends enter this code under Share → Join friend group.</p>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-solid" onclick="closeGroupModal()">Done</button>
+    </div>`;
+}
+
+// ── Friend group: join ─────────────────────────────────────────────────────
+function openGroupJoin() {
+  document.getElementById('grpModalTitle').textContent = 'Join Friend Group';
+  document.getElementById('grpModalContent').innerHTML = `
+    <div class="modal-field">
+      <label>Invite code</label>
+      <input type="text" id="grpCodeInput" placeholder="8-character code" autocomplete="off" maxlength="8" style="font-family:monospace;font-size:1rem;letter-spacing:.1em;text-transform:uppercase" />
+    </div>
+    <div class="modal-field">
+      <label>Your display name in the group</label>
+      <input type="text" id="grpJoinDisplayInput" placeholder="e.g. Emma" autocomplete="off" />
+    </div>
+    <div id="grpJoinMsg" style="font-size:.8rem;color:var(--red);min-height:1.2em;margin-bottom:.5rem"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.75rem">
+      <button class="btn btn-outline" onclick="closeGroupModal()">Cancel</button>
+      <button class="btn btn-solid" onclick="joinGroup()">Join group</button>
+    </div>`;
+  document.getElementById('groupModal').style.display = 'flex';
+}
+
+async function joinGroup() {
+  const code = document.getElementById('grpCodeInput')?.value.trim().toLowerCase();
+  const displayName = document.getElementById('grpJoinDisplayInput')?.value.trim();
+  const msg = document.getElementById('grpJoinMsg');
+  if(!code) { if(msg) msg.textContent='Enter the invite code.'; return; }
+  if(!displayName) { if(msg) msg.textContent='Enter your display name.'; return; }
+  if(msg) msg.textContent='';
+
+  const { data: grp } = await sb.from('camp_groups')
+    .select('id, name, invite_code').eq('invite_code', code).maybeSingle();
+  if(!grp) { if(msg) msg.textContent='No group found with that code.'; return; }
+
+  const { error: memErr } = await sb.from('group_members')
+    .insert({ group_id: grp.id, user_id: currentUser.id, display_name: displayName });
+  if(memErr) { if(msg) msg.textContent=memErr.message; return; }
+
+  S.group = { id: grp.id, name: grp.name, inviteCode: grp.invite_code, members: [] };
+  renderCollabArea();
+  loadGroupPlans();
+  closeGroupModal();
+}
+
+// ── Friend group: manage modal ─────────────────────────────────────────────
+function openGroupManage() {
+  if(!S.group) return;
+  document.getElementById('grpModalTitle').textContent = S.group.name;
+  const memberRows = S.group.members.map(m =>
+    `<li><span class="member-dot"></span> ${m.displayName}</li>`
+  ).join('');
+  document.getElementById('grpModalContent').innerHTML = `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem">Invite code</div>
+      <div class="invite-code-box">${S.group.inviteCode}</div>
+      <p style="font-size:.75rem;color:var(--muted);margin-top:.2rem">Share this with friends to join.</p>
+    </div>
+    ${S.group.members.length ? `
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem">Members</div>
+      <ul class="member-list">${memberRows}</ul>
+    </div>` : ''}
+    <div style="border-top:1px solid var(--border);padding-top:1rem;display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-outline" style="border-color:var(--red);color:var(--red);font-size:.8rem" onclick="leaveGroup()">Leave group</button>
+      <button class="btn btn-outline" onclick="closeGroupModal()">Close</button>
+    </div>`;
+  document.getElementById('groupModal').style.display = 'flex';
+}
+
+async function leaveGroup() {
+  if(!S.group) return;
+  if(!confirm('Leave this friend group? You can rejoin with the same code.')) return;
+  await sb.from('group_members').delete().eq('group_id', S.group.id).eq('user_id', currentUser.id);
+  S.group = null;
+  closeGroupModal();
+  renderCollabArea();
+  renderAll();
+}
+
+function closeGroupModal() {
+  document.getElementById('groupModal').style.display = 'none';
+}
+
+// ── Load group plans ───────────────────────────────────────────────────────
+async function loadGroupPlans() {
+  if(!S.group) return;
+  const { data, error } = await sb.rpc('get_group_plans', { p_group_id: S.group.id });
+  if(error || !data) return;
+  S.group.members = data
+    .filter(row => row.uid !== currentUser.id)
+    .map(row => ({ userId: row.uid, displayName: row.display_name, planData: row.plan_data }));
+  renderAll(); // re-render with friend indicators
+}
+
+renderAll();
+</script>
+</body>
+</html>
