@@ -2306,15 +2306,12 @@ renderAll();
 const WIZ = {
   step:0, numSteps:6,
   kidCount:2,
-  kidData:[],        // [{name,age,lastDay,firstDay}]
-  prefs:[],          // activity type strings
+  kidData:[],        // [{name,age,lastDay,firstDay,prefs:[],_interestText:'',_detected:null}]
   style:'both',      // 'day'|'sleep'|'both'
   budget:'',         // ''|'low'|'mid'|'high'
   mode:'together',   // 'together'|'separate'
   vacationWeeks:new Set(), // ISO mon strings to skip
   _recs:[],          // [{mon,weekLabel,campName,type,isSleep,kidLabel}]
-  _interestText:'',  // free-text the user typed on step 2
-  _detected:null,    // null=not yet run, []=ran but no matches, [types]=matched
 };
 
 // maps: which DB camp types this interest matches
@@ -2349,7 +2346,7 @@ const WIZ_ACT = [
 const WIZ_TITLES = [
   ['About Your Kids',       "Tell us how many children you're planning for, and their ages."],
   ['Summer Dates',          'When does school end and when does it start back up?'],
-  ['Activity Interests',    'What kinds of activities do your kids enjoy? Pick all that apply.'],
+  ['Activity Interests',    "What does each child enjoy? Describe their interests or pick from the list."],
   ['Camp Preferences',      'Fine-tune your results with a few more details.'],
   ['Hold Dates for Vacation','Are there any weeks you want to keep free? We\'ll skip those in your plan.'],
   ['Your Personalized Plan', 'Here\'s a recommended schedule — review it and refine as needed.'],
@@ -2360,10 +2357,11 @@ function openWizard() {
   WIZ.kidData  = S.kids.map(k => ({
     name:k.name||'', age:k.age||'',
     lastDay:k.lastDay||'2026-06-03', firstDay:k.firstDay||'2026-08-17',
+    prefs:[], _interestText:'', _detected:null,
   }));
   while(WIZ.kidData.length < 4)
-    WIZ.kidData.push({name:'',age:'',lastDay:'2026-06-03',firstDay:'2026-08-17'});
-  WIZ.step=0; WIZ.prefs=[]; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[]; WIZ._interestText=''; WIZ._detected=null;
+    WIZ.kidData.push({name:'',age:'',lastDay:'2026-06-03',firstDay:'2026-08-17',prefs:[],_interestText:'',_detected:null});
+  WIZ.step=0; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[];
   document.getElementById('wizOverlay').style.display='flex';
   wizRender();
 }
@@ -2539,69 +2537,82 @@ function wizDetectInterests(text) {
   return Object.entries(scores).filter(([,s])=>s>0).sort((a,b)=>b[1]-a[1]).map(([type])=>type);
 }
 
-function wizMatchText() {
-  const el = document.getElementById('wizInterestText');
+function wizMatchText(ki) {
+  const kd = WIZ.kidData[ki];
+  const el = document.getElementById(`wizInterestText${ki}`);
   const text = el?.value || '';
-  WIZ._interestText = text;
-  if(!text.trim()) { WIZ._detected=[]; document.getElementById('wizBody').innerHTML=wizBodyHtml(); return; }
+  kd._interestText = text;
+  if(!text.trim()) { kd._detected=[]; document.getElementById('wizBody').innerHTML=wizBodyHtml(); return; }
   const detected = wizDetectInterests(text);
-  WIZ._detected = detected;
-  // Add newly detected to prefs (never remove manually-selected ones)
-  detected.forEach(t=>{ if(!WIZ.prefs.includes(t)) WIZ.prefs.push(t); });
+  kd._detected = detected;
+  // Add newly detected to this kid's prefs (never remove manually-selected ones)
+  detected.forEach(t=>{ if(!kd.prefs.includes(t)) kd.prefs.push(t); });
   document.getElementById('wizBody').innerHTML = wizBodyHtml();
 }
 
 function wizBody2() {
-  // Detected results banner
-  let detectedHtml = '';
-  if(WIZ._detected === null) {
-    // Not yet run — show nothing extra
-  } else if(!WIZ._detected.length) {
-    detectedHtml = `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:9px;padding:.6rem .9rem;font-size:.8rem;color:#854d0e;margin-bottom:.85rem">
-      No categories detected. Try different wording, or pick from the list below.</div>`;
-  } else {
-    const chips = WIZ._detected.map(t=>{
-      const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
-      return `<div class="pref-chip on" onclick="wizToggle('${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
-    }).join('');
-    detectedHtml = `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:.65rem .9rem;margin-bottom:.85rem">
-      <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin-bottom:.38rem">Matched interests</div>
-      <div class="pref-grid">${chips}</div>
-    </div>`;
-  }
+  const blocks = Array.from({length:WIZ.kidCount}, (_,ki) => {
+    const kd = WIZ.kidData[ki];
+    const col = KID_COLORS[ki];
+    const nm = kd.name || `Child ${ki+1}`;
 
-  // Full grouped chip grid
-  const sections = WIZ_GROUPS.map(g=>{
-    const chips = g.types.map(t=>{
-      const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
-      return `<div class="pref-chip${WIZ.prefs.includes(a.type)?' on':''}" onclick="wizToggle('${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
+    // Detected results banner for this kid
+    let detectedHtml = '';
+    if(kd._detected !== null && kd._detected.length === 0) {
+      detectedHtml = `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:9px;padding:.5rem .8rem;font-size:.78rem;color:#854d0e;margin-bottom:.65rem">
+        No categories detected. Try different wording, or pick from the list below.</div>`;
+    } else if(kd._detected?.length) {
+      const chips = kd._detected.map(t=>{
+        const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
+        return `<div class="pref-chip on" onclick="wizToggle(${ki},'${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
+      }).join('');
+      detectedHtml = `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:.6rem .85rem;margin-bottom:.65rem">
+        <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin-bottom:.35rem">Matched interests</div>
+        <div class="pref-grid">${chips}</div>
+      </div>`;
+    }
+
+    // Full grouped chip grid for this kid
+    const sections = WIZ_GROUPS.map(g=>{
+      const chips = g.types.map(t=>{
+        const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
+        return `<div class="pref-chip${kd.prefs.includes(a.type)?' on':''}" onclick="wizToggle(${ki},'${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
+      }).join('');
+      return `<div style="margin-bottom:.65rem">
+        <div style="font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.35rem">${g.label}</div>
+        <div class="pref-grid">${chips}</div>
+      </div>`;
     }).join('');
-    return `<div style="margin-bottom:.75rem">
-      <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.38rem">${g.label}</div>
-      <div class="pref-grid">${chips}</div>
+
+    const hint = kd._detected?.length ? 'All interests — adjust as needed' : 'Pick from the list';
+    return `<div class="wiz-kid-block" style="border-color:${col}30">
+      <div class="wiz-kid-label">
+        <span style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>
+        ${nm}
+      </div>
+      <div style="display:flex;gap:.5rem;margin-bottom:.65rem;align-items:flex-end">
+        <textarea id="wizInterestText${ki}" rows="2"
+          placeholder='e.g. "loves soccer and coding, interested in nature hikes"'
+          style="flex:1;padding:.52rem .68rem;border:1.5px solid var(--border);border-radius:10px;font-size:.82rem;font-family:inherit;resize:none;outline:none;line-height:1.5;transition:border-color .15s,box-shadow .15s"
+          onfocus="this.style.borderColor='var(--primary)';this.style.boxShadow='0 0 0 3px rgba(3,105,161,.12)'"
+          onblur="this.style.borderColor='var(--border)';this.style.boxShadow=''"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();wizMatchText(${ki})}"
+        >${kd._interestText||''}</textarea>
+        <button onclick="wizMatchText(${ki})" style="padding:.5rem .9rem;background:var(--primary);color:white;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1.4">Match →</button>
+      </div>
+      ${detectedHtml}
+      <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.5rem">${hint}</div>
+      ${sections}
     </div>`;
   }).join('');
 
-  return `
-    <div class="wiz-sec-sub">Describe what your kids enjoy — we'll match it to camp categories. Or pick directly from the list below.</div>
-    <div style="display:flex;gap:.5rem;margin-bottom:.9rem;align-items:flex-end">
-      <textarea id="wizInterestText" rows="2"
-        placeholder='e.g. "loves soccer and coding, interested in fencing and nature hikes, pre-college academic programs"'
-        style="flex:1;padding:.58rem .72rem;border:1.5px solid var(--border);border-radius:10px;font-size:.83rem;font-family:inherit;resize:none;outline:none;line-height:1.5;transition:border-color .15s,box-shadow .15s"
-        onfocus="this.style.borderColor='var(--primary)';this.style.boxShadow='0 0 0 3px rgba(3,105,161,.12)'"
-        onblur="this.style.borderColor='var(--border)';this.style.boxShadow=''"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();wizMatchText()}"
-      >${WIZ._interestText||''}</textarea>
-      <button onclick="wizMatchText()" style="padding:.5rem .9rem;background:var(--primary);color:white;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1.4">Match →</button>
-    </div>
-    ${detectedHtml}
-    <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.55rem">${WIZ._detected?.length?'All interests — adjust as needed':'Pick from the list'}</div>
-    ${sections}`;
+  return `<div class="wiz-sec-sub" style="margin-bottom:.85rem">Describe what each child enjoys — we'll match it to camp categories. Or pick directly from the list.</div>${blocks}`;
 }
 
-function wizToggle(type,el) {
-  if(WIZ.prefs.includes(type)){WIZ.prefs=WIZ.prefs.filter(t=>t!==type);el.classList.remove('on');}
-  else{WIZ.prefs.push(type);el.classList.add('on');}
+function wizToggle(ki,type,el) {
+  const kd=WIZ.kidData[ki];
+  if(kd.prefs.includes(type)){kd.prefs=kd.prefs.filter(t=>t!==type);el.classList.remove('on');}
+  else{kd.prefs.push(type);el.classList.add('on');}
 }
 
 // ── Step 3: Style, Budget, Mode ───────────────────────────────────
@@ -2708,9 +2719,20 @@ function wizBody5() {
   // Filter summary bar
   const styleLabel={day:'Day only',sleep:'Sleepaway OK',both:'Day + Sleepaway'}[WIZ.style];
   const budgetLabel={low:'<$600/wk',mid:'$600–$1k/wk',high:'$1k+/wk','':'Any budget'}[WIZ.budget];
-  const prefTags=WIZ.prefs.length
-    ? WIZ.prefs.map(p=>{const a=WIZ_ACT.find(x=>x.type===p);return `<span class="wiz-filter-tag">${a?a.icon+' '+a.label:p}</span>`;}).join('')
-    : '<span class="wiz-filter-tag">All types</span>';
+  const allPrefsUnion=[...new Set(WIZ.kidData.slice(0,WIZ.kidCount).flatMap(kd=>kd.prefs))];
+  let prefTags;
+  if(WIZ.kidCount>1 && WIZ.mode==='separate') {
+    prefTags=WIZ.kidData.slice(0,WIZ.kidCount).map((kd,i)=>{
+      const nm=kd.name||`Child ${i+1}`;
+      const col=KID_COLORS[i];
+      const ints=kd.prefs.length?kd.prefs.map(p=>{const a=WIZ_ACT.find(x=>x.type===p);return a?a.icon+' '+a.label:p;}).join(', '):'All types';
+      return `<span class="wiz-filter-tag" style="border-color:${col}50;background:${col}12"><span style="color:${col};font-weight:800">${nm}:</span> ${ints}</span>`;
+    }).join('');
+  } else {
+    prefTags=allPrefsUnion.length
+      ?allPrefsUnion.map(p=>{const a=WIZ_ACT.find(x=>x.type===p);return `<span class="wiz-filter-tag">${a?a.icon+' '+a.label:p}</span>`;}).join('')
+      :'<span class="wiz-filter-tag">All types</span>';
+  }
   const vacNote=WIZ.vacationWeeks.size?`<span class="wiz-filter-tag">${WIZ.vacationWeeks.size} wk vacation</span>`:'';
   const modeTag=WIZ.kidCount>1?`<span class="wiz-filter-tag">${WIZ.mode==='together'?'Together':'Separately'}</span>`:'';
   const filterBar=`<div class="wiz-filter-bar">
@@ -2775,24 +2797,22 @@ function wizGenRecs() {
   document.querySelectorAll('#kidCountToggle .tgl').forEach((b,i)=>
     b.classList.toggle('active',i+1===n));
 
-  // Build the set of DB camp types that match selected preferences via maps
-  const selMaps = new Set(
-    WIZ.prefs.flatMap(p => WIZ_ACT.find(a=>a.type===p)?.maps || [p])
-  );
-
-  // Scorer function
-  function scorecamp(c,ageNum) {
+  // Scorer — selMaps passed per call so each kid can have their own interest set
+  function scorecamp(c,ageNum,selMaps) {
     if(WIZ.style==='day'   && c.sleep)  return -1;
     if(WIZ.style==='sleep' && !c.sleep) return -1;
     if(c.comingSoon) return -1;
     if(ageNum>0 && (ageNum<c.ageMin || ageNum>c.ageMax)) return -1;
-    let sc = WIZ.prefs.length ? (selMaps.has(c.type)?10:0) : 1;
+    let sc = selMaps.size ? (selMaps.has(c.type)?10:0) : 1;
     if(WIZ.budget==='low'  && c.costN>0&&c.costN<=600)    sc+=4;
     if(WIZ.budget==='mid'  && c.costN>600&&c.costN<=1000) sc+=4;
     if(WIZ.budget==='high' && c.costN>1000)               sc+=4;
     if(!c.appRequired) sc+=1;
     if(c.verified)     sc+=1;
     return sc;
+  }
+  function buildSelMaps(prefs) {
+    return new Set(prefs.flatMap(p=>WIZ_ACT.find(a=>a.type===p)?.maps||[p]));
   }
 
   // Add a sleepaway session to a kid's consider list for all its covered weeks
@@ -2815,13 +2835,16 @@ function wizGenRecs() {
     const minA=ages.length?Math.min(...ages):5;
     const maxA=ages.length?Math.max(...ages):14;
 
+    // Union of all kids' prefs so together-mode respects everyone's interests
+    const togetherPrefs=[...new Set(WIZ.kidData.slice(0,n).flatMap(kd=>kd.prefs))];
+    const togetherMaps=buildSelMaps(togetherPrefs);
     const scored=allCamps().filter(c=>{
       if(WIZ.style==='day'   && c.sleep)  return false;
       if(WIZ.style==='sleep' && !c.sleep) return false;
       if(c.comingSoon) return false;
       if(ages.length && (c.ageMax<minA || c.ageMin>maxA)) return false;
       return true;
-    }).map(c=>({c,s:scorecamp(c,minA)})).filter(x=>x.s>=0)
+    }).map(c=>({c,s:scorecamp(c,minA,togetherMaps)})).filter(x=>x.s>=0)
       .sort((a,b)=>b.s-a.s);
 
     const usedSess=new Set();
@@ -2866,8 +2889,9 @@ function wizGenRecs() {
       const ageNum=parseInt(WIZ.kidData[ki].age)||0;
       const kidName=k.name;
       const kidWeeks=genWeeks(k.lastDay,k.firstDay);
+      const kidMaps=buildSelMaps(WIZ.kidData[ki].prefs);
       const scored=allCamps()
-        .map(c=>({c,s:scorecamp(c,ageNum)})).filter(x=>x.s>=0)
+        .map(c=>({c,s:scorecamp(c,ageNum,kidMaps)})).filter(x=>x.s>=0)
         .sort((a,b)=>b.s-a.s);
       const usedSess=new Set();
       let ri=0;
@@ -2920,8 +2944,10 @@ function wizSave() {
       if(fd) WIZ.kidData[i].firstDay=fd;
     }
   } else if(WIZ.step===2) {
-    const t=document.getElementById('wizInterestText')?.value;
-    if(t!=null) WIZ._interestText=t;
+    for(let i=0;i<WIZ.kidCount;i++){
+      const t=document.getElementById(`wizInterestText${i}`)?.value;
+      if(t!=null) WIZ.kidData[i]._interestText=t;
+    }
   }
   return true;
 }
