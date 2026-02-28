@@ -2756,7 +2756,8 @@ function wizBody5() {
     <button onclick="wizJumpTo(2)" style="margin-left:auto;background:none;border:none;font-size:.76rem;color:var(--primary);cursor:pointer;font-weight:700;white-space:nowrap">✏️ Refine</button>
   </div>`;
 
-  if(!WIZ._recs.length) return filterBar+`
+  const campRecs=WIZ._recs.filter(r=>!r.vacation);
+  if(!campRecs.length) return filterBar+`
     <div style="text-align:center;padding:2rem 1rem">
       <div style="font-size:2.5rem;margin-bottom:.5rem">🤔</div>
       <div style="font-size:.95rem;font-weight:700;margin-bottom:.4rem">No matches found</div>
@@ -2766,10 +2767,18 @@ function wizBody5() {
   const budgetNote = WIZ.totalBudget>0
     ? ` · Est. total: <strong>$${(WIZ._budgetSpent||0).toLocaleString()}</strong> of $${WIZ.totalBudget.toLocaleString()}`
     : '';
+  const nCamp=campRecs.length;
   const banner=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.79rem;color:#166534">
-    ✅ <strong>${WIZ._recs.length} week${WIZ._recs.length===1?'':'s'}</strong> added to your "Considering" list — in chronological order${budgetNote}. Promote any to "Planned" once you're ready to commit.
+    ✅ <strong>${nCamp} camp week${nCamp===1?'':'s'}</strong> added to your "Considering" list${budgetNote}. Promote any to "Planned" once you're ready to commit.
   </div>`;
-  const items=WIZ._recs.map(r=>`
+  const items=WIZ._recs.map(r=>r.vacation ? `
+    <div class="wiz-rec-card" style="opacity:.55;background:#f8fafc;border-color:#e2e8f0">
+      <div class="wiz-rec-week" style="color:#94a3b8">${r.weekLabel}</div>
+      <div class="wiz-rec-info">
+        <div class="wiz-rec-name" style="color:#64748b">🏖 Vacation</div>
+        <div class="wiz-rec-meta" style="color:#94a3b8">Held for family time</div>
+      </div>
+    </div>` : `
     <div class="wiz-rec-card">
       <div class="wiz-rec-week">${r.weekLabel}</div>
       <div class="wiz-rec-info">
@@ -2805,6 +2814,10 @@ function wizGenRecs() {
   });
   S.activeKid=0;
   WEEKS=genAllWeeks();
+
+  // Sync wizard vacation weeks into S.vacation so the weekly planner marks them
+  S.vacation={};
+  WIZ.vacationWeeks.forEach(mon=>{S.vacation[mon]=true;});
 
   // Update main app filter UI to reflect wizard choices
   S.slFilter=WIZ.style==='both'?'':WIZ.style;
@@ -2881,7 +2894,10 @@ function wizGenRecs() {
     let ri=0;
     WEEKS.forEach(w=>{
       const fri=iso(addD(pd(w.mon),4));
-      if(WIZ.vacationWeeks.has(w.mon)) return; // held for vacation
+      if(WIZ.vacationWeeks.has(w.mon)) {
+        WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,vacation:true});
+        return;
+      }
       if(S.kids.every(k=>k.consider[w.mon]?.length||k.planned[w.mon])) return;
       let pick=null, pickSIdx=-1;
       for(let a=0;a<scored.length;a++){
@@ -2956,6 +2972,17 @@ function wizGenRecs() {
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null,
           cost:fmtCost(pick.cost,pick.costN,pick.sleep)});
+      });
+    });
+    // Add vacation entries — one per vacation week that falls in any kid's schedule
+    const vacAdded=new Set();
+    WIZ.kidData.slice(0,n).forEach(kd=>{
+      genWeeks(kd.lastDay||'2026-06-03',kd.firstDay||'2026-08-17').forEach(w=>{
+        if(WIZ.vacationWeeks.has(w.mon)&&!vacAdded.has(w.mon)){
+          vacAdded.add(w.mon);
+          const fri=iso(addD(pd(w.mon),4));
+          WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,vacation:true});
+        }
       });
     });
     WIZ._recs.sort((a,b)=>a.mon<b.mon?-1:a.mon>b.mon?1:0); // sort by ISO date, not display string
