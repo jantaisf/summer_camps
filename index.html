@@ -367,6 +367,12 @@
     .btn-wiz-skip{background:none;border:none;font-size:.77rem;color:var(--muted);cursor:pointer;text-decoration:underline;}
     .wiz-trigger{padding:.33rem .82rem;border-radius:99px;background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.36);color:white;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s;}
     .wiz-trigger:hover{background:rgba(255,255,255,.26);}
+    .wiz-vac-grid{display:flex;flex-wrap:wrap;gap:.38rem;margin-top:.25rem;}
+    .wiz-vac-pill{padding:.4rem .72rem;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:.77rem;font-weight:600;color:var(--muted);transition:all .15s;user-select:none;}
+    .wiz-vac-pill:hover{border-color:#f59e0b;color:#92400e;background:#fffbeb;}
+    .wiz-vac-pill.on{border-color:#f59e0b;background:#fef3c7;color:#92400e;}
+    .wiz-filter-bar{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;margin-bottom:.85rem;font-size:.77rem;display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;}
+    .wiz-filter-tag{background:var(--primary-light);color:var(--primary);font-weight:700;padding:.15rem .42rem;border-radius:99px;font-size:.72rem;}
   </style>
 </head>
 <body>
@@ -2268,14 +2274,15 @@ renderAll();
 // ══════════════════════════════════════════════════════════════════
 
 const WIZ = {
-  step:0, numSteps:5,
+  step:0, numSteps:6,
   kidCount:2,
-  kidData:[],    // [{name,age,lastDay,firstDay}]
-  prefs:[],      // activity type strings
-  style:'both',  // 'day'|'sleep'|'both'
-  budget:'',     // ''|'low'|'mid'|'high'
-  mode:'together', // 'together'|'separate'
-  _recs:[],      // [{weekLabel,campName,type,isSleep,kidLabel}]
+  kidData:[],        // [{name,age,lastDay,firstDay}]
+  prefs:[],          // activity type strings
+  style:'both',      // 'day'|'sleep'|'both'
+  budget:'',         // ''|'low'|'mid'|'high'
+  mode:'together',   // 'together'|'separate'
+  vacationWeeks:new Set(), // ISO mon strings to skip
+  _recs:[],          // [{mon,weekLabel,campName,type,isSleep,kidLabel}]
 };
 
 const WIZ_ACT = [
@@ -2290,11 +2297,12 @@ const WIZ_ACT = [
 ];
 
 const WIZ_TITLES = [
-  ['About Your Kids',      "Tell us how many children you're planning for, and their ages."],
-  ['Summer Dates',         'When does school end and when does it start back up?'],
-  ['Activity Interests',   'What kinds of activities do your kids enjoy? Pick all that apply.'],
-  ['Camp Preferences',     'Fine-tune your results with a few more details.'],
-  ['Your Personalized Plan','Here\'s a recommended schedule — review and add to your planner!'],
+  ['About Your Kids',       "Tell us how many children you're planning for, and their ages."],
+  ['Summer Dates',          'When does school end and when does it start back up?'],
+  ['Activity Interests',    'What kinds of activities do your kids enjoy? Pick all that apply.'],
+  ['Camp Preferences',      'Fine-tune your results with a few more details.'],
+  ['Hold Dates for Vacation','Are there any weeks you want to keep free? We\'ll skip those in your plan.'],
+  ['Your Personalized Plan', 'Here\'s a recommended schedule — review it and refine as needed.'],
 ];
 
 function openWizard() {
@@ -2305,7 +2313,7 @@ function openWizard() {
   }));
   while(WIZ.kidData.length < 4)
     WIZ.kidData.push({name:'',age:'',lastDay:'2026-06-03',firstDay:'2026-08-17'});
-  WIZ.step=0; WIZ.prefs=[]; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ._recs=[];
+  WIZ.step=0; WIZ.prefs=[]; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[];
   document.getElementById('wizOverlay').style.display='flex';
   wizRender();
 }
@@ -2319,7 +2327,7 @@ function wizNav(dir) {
     if(!wizSave()) return;
     if(WIZ.step===WIZ.numSteps-1){closeWizard();return;}
     WIZ.step++;
-    if(WIZ.step===4) wizGenRecs();
+    if(WIZ.step===5) wizGenRecs();
   } else {
     if(WIZ.step===0){closeWizard();return;}
     WIZ.step--;
@@ -2347,6 +2355,7 @@ function wizBodyHtml() {
   if(WIZ.step===2) return wizBody2();
   if(WIZ.step===3) return wizBody3();
   if(WIZ.step===4) return wizBody4();
+  if(WIZ.step===5) return wizBody5();
   return '';
 }
 
@@ -2500,18 +2509,68 @@ function wizPickMode(v,el) {
   el.classList.add('on');
 }
 
-// ── Step 4: Results ───────────────────────────────────────────────
+// ── Step 4: Vacation holds ────────────────────────────────────────
 function wizBody4() {
-  if(!WIZ._recs.length) return `
-    <div style="text-align:center;padding:2.5rem 1rem">
-      <div style="font-size:2.6rem;margin-bottom:.5rem">🤔</div>
-      <div style="font-size:.95rem;font-weight:700;margin-bottom:.4rem">No matches found</div>
-      <p style="font-size:.8rem;color:var(--muted);line-height:1.6">
-        Try going back and selecting fewer activity filters, changing the camp style, or widening your budget range.
-      </p>
+  const monSet=new Set();
+  WIZ.kidData.slice(0,WIZ.kidCount).forEach(kd=>{
+    genWeeks(kd.lastDay,kd.firstDay).forEach(w=>monSet.add(w.mon));
+  });
+  const weeks=[...monSet].sort().map(mon=>({
+    mon, fri:iso(addD(pd(mon),4)),
+    label:`${fmt(pd(mon))} – ${fmt(addD(pd(mon),4))}`,
+  }));
+  if(!weeks.length) return `<p style="color:var(--muted);font-size:.83rem">Complete the dates in step 2 to see summer weeks here.</p>`;
+  const pills=weeks.map(w=>{
+    const on=WIZ.vacationWeeks.has(w.mon);
+    return `<div class="wiz-vac-pill${on?' on':''}" onclick="wizToggleVac('${w.mon}',this)">
+      ${w.label}
     </div>`;
-  const banner=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:.68rem 1rem;margin-bottom:.9rem;font-size:.79rem;color:#166534">
-    ✅ <strong>${WIZ._recs.length} week${WIZ._recs.length===1?'':'s'}</strong> of recommended camps have been added to your "Considering" list. Review below, then promote to "Planned" when ready.
+  }).join('');
+  const count=WIZ.vacationWeeks.size;
+  return `
+    <div class="wiz-vac-grid">${pills}</div>
+    <p style="font-size:.74rem;color:var(--muted);margin-top:.8rem">
+      ${count?`<strong>${count} week${count===1?'':'s'}</strong> held for vacation.`:'No vacation weeks selected — tap any weeks above to hold them.'}
+    </p>`;
+}
+
+function wizToggleVac(mon,el) {
+  if(WIZ.vacationWeeks.has(mon)){WIZ.vacationWeeks.delete(mon);el.classList.remove('on');}
+  else{WIZ.vacationWeeks.add(mon);el.classList.add('on');}
+  const count=WIZ.vacationWeeks.size;
+  const note=el.closest('.wiz-body')?.querySelector('p');
+  if(note) note.innerHTML=count
+    ?`<strong>${count} week${count===1?'':'s'}</strong> held for vacation.`
+    :'No vacation weeks selected — tap any weeks above to hold them.';
+}
+
+// ── Step 5: Results ───────────────────────────────────────────────
+function wizBody5() {
+  // Filter summary bar
+  const styleLabel={day:'Day only',sleep:'Sleepaway OK',both:'Day + Sleepaway'}[WIZ.style];
+  const budgetLabel={low:'<$600/wk',mid:'$600–$1k/wk',high:'$1k+/wk','':'Any budget'}[WIZ.budget];
+  const prefTags=WIZ.prefs.length
+    ? WIZ.prefs.map(p=>`<span class="wiz-filter-tag">${p}</span>`).join('')
+    : '<span class="wiz-filter-tag">All types</span>';
+  const vacNote=WIZ.vacationWeeks.size?`<span class="wiz-filter-tag">${WIZ.vacationWeeks.size} wk vacation</span>`:'';
+  const modeTag=WIZ.kidCount>1?`<span class="wiz-filter-tag">${WIZ.mode==='together'?'Together':'Separately'}</span>`:'';
+  const filterBar=`<div class="wiz-filter-bar">
+    ${prefTags}
+    <span class="wiz-filter-tag">${styleLabel}</span>
+    <span class="wiz-filter-tag">${budgetLabel}</span>
+    ${modeTag}${vacNote}
+    <button onclick="wizJumpTo(2)" style="margin-left:auto;background:none;border:none;font-size:.76rem;color:var(--primary);cursor:pointer;font-weight:700;white-space:nowrap">✏️ Refine</button>
+  </div>`;
+
+  if(!WIZ._recs.length) return filterBar+`
+    <div style="text-align:center;padding:2rem 1rem">
+      <div style="font-size:2.5rem;margin-bottom:.5rem">🤔</div>
+      <div style="font-size:.95rem;font-weight:700;margin-bottom:.4rem">No matches found</div>
+      <p style="font-size:.8rem;color:var(--muted);line-height:1.6">Try fewer activity filters, a different camp style, or a wider budget. Click <strong>✏️ Refine</strong> above to adjust.</p>
+    </div>`;
+
+  const banner=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.79rem;color:#166534">
+    ✅ <strong>${WIZ._recs.length} week${WIZ._recs.length===1?'':'s'}</strong> added to your "Considering" list — in chronological order. Promote any to "Planned" once you're ready to commit.
   </div>`;
   const items=WIZ._recs.map(r=>`
     <div class="wiz-rec-card">
@@ -2522,7 +2581,13 @@ function wizBody4() {
       </div>
       ${r.kidLabel?`<span class="wiz-rec-who">${r.kidLabel}</span>`:''}
     </div>`).join('');
-  return banner+items;
+  return filterBar+banner+items;
+}
+
+// Jump to a specific step (used by Refine button)
+function wizJumpTo(step) {
+  WIZ.step=step;
+  wizRender();
 }
 
 // ── Recommendation engine ─────────────────────────────────────────
@@ -2599,6 +2664,7 @@ function wizGenRecs() {
     let ri=0;
     WEEKS.forEach(w=>{
       const fri=iso(addD(pd(w.mon),4));
+      if(WIZ.vacationWeeks.has(w.mon)) return; // held for vacation
       if(S.kids.every(k=>k.consider[w.mon]?.length||k.planned[w.mon])) return;
       let pick=null, pickSIdx=-1;
       for(let a=0;a<scored.length;a++){
@@ -2625,7 +2691,7 @@ function wizGenRecs() {
         }
       });
       if(S.kids.some((_,ki)=>kidHasWeek(ki,w.mon)))
-        WIZ._recs.push({weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
+        WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?'All kids':null});
     });
 
@@ -2642,6 +2708,7 @@ function wizGenRecs() {
       let ri=0;
       kidWeeks.forEach(w=>{
         const fri=iso(addD(pd(w.mon),4));
+        if(WIZ.vacationWeeks.has(w.mon)) return; // held for vacation
         if(k.consider[w.mon]?.length||k.planned[w.mon]) return;
         let pick=null, pickSIdx=-1;
         for(let a=0;a<scored.length;a++){
@@ -2663,11 +2730,11 @@ function wizGenRecs() {
           if(!k.consider[w.mon]) k.consider[w.mon]=[];
           k.consider[w.mon].push({campId:pick.id,sessIdx:null,color:pick.color,name:pick.name});
         }
-        WIZ._recs.push({weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
+        WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null});
       });
     });
-    WIZ._recs.sort((a,b)=>a.weekLabel<b.weekLabel?-1:1);
+    WIZ._recs.sort((a,b)=>a.mon<b.mon?-1:a.mon>b.mon?1:0); // sort by ISO date, not display string
   }
   renderAll();
 }
