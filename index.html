@@ -1076,13 +1076,13 @@ function renderWeeks() {
         const cc = allCamps().find(c=>c.id===e.campId);
         const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
         const ccost = showCost ? fmtCost(cc.cost, cc.costN, cc.sleep) : null;
-        chips.push(`<div class="wk-chip-consider"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
+        chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId},'${w.mon}',${kidIdx})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
       });
       if(p) {
         const pc = allCamps().find(c=>c.id===p.campId);
         const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
         const pcost = showCost ? fmtCost(pc.cost, pc.costN, pc.sleep) : null;
-        chips.push(`<div class="wk-chip" style="background:${p.color}"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
+        chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId},'${w.mon}',${kidIdx})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
       }
       if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
       return `<div class="${colCls}" onclick="event.stopPropagation();selWeekKid('${w.mon}',${kidIdx})">${chips.join('')}</div>`;
@@ -1720,6 +1720,17 @@ function selWeekKid(mon, kidIdx) {
 }
 function setActiveKid(kidIdx) { S.activeKid=kidIdx; renderAll(); }
 function toggleCard(id) { S.expandCard=S.expandCard===id?null:id; renderCamps(); }
+
+function showCampCard(campId, mon, kidIdx) {
+  S.selWeek = mon;
+  S.activeKid = kidIdx ?? S.activeKid;
+  S.expandCard = campId;
+  renderWeeks();
+  renderCamps();
+  requestAnimationFrame(() => {
+    document.querySelector('#campGrid .card.expanded')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+  });
+}
 
 // ── Event listeners ───────────────────────────────────────────────────────
 document.querySelectorAll('.tgl[data-sl]').forEach(b=>b.addEventListener('click',()=>{
