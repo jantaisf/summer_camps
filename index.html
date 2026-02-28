@@ -738,7 +738,7 @@ const S = {
     { name:"Child 1", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} },
     { name:"Child 2", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} }
   ],
-  activeKid: 0, variant: null, customCamps: [], mapView: false, vacation: {},
+  activeKid: 0, variant: null, customCamps: [], mapView: false, vacation: {}, focusedCamp: null,
   slFilter:"", actFilter:"", q:"", selWeek:null, expandCard:null, appFilter:"",
   profile: { homeAddress:'', workAddress:'' },
   household: null,   // { id, ownerId, isOwner } | null
@@ -1076,13 +1076,13 @@ function renderWeeks() {
         const cc = allCamps().find(c=>c.id===e.campId);
         const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
         const ccost = showCost ? fmtCost(cc.cost, cc.costN, cc.sleep) : null;
-        chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId},'${w.mon}',${kidIdx})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
+        chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
       });
       if(p) {
         const pc = allCamps().find(c=>c.id===p.campId);
         const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
         const pcost = showCost ? fmtCost(pc.cost, pc.costN, pc.sleep) : null;
-        chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId},'${w.mon}',${kidIdx})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
+        chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
       }
       if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
       return `<div class="${colCls}" onclick="event.stopPropagation();selWeekKid('${w.mon}',${kidIdx})">${chips.join('')}</div>`;
@@ -1153,9 +1153,19 @@ function renderCamps() {
     kidTabsEl.innerHTML = '';
   }
 
-  const filtered = getFiltered();
-  titleEl.textContent = S.selWeek ? `${fmt(pd(S.selWeek))} – ${fmt(addD(pd(S.selWeek),4))}` : 'All Camps';
-  countEl.textContent = `${filtered.length} camp${filtered.length!==1?'s':''}`;
+  const filtered = S.focusedCamp !== null
+    ? allCamps().filter(c => c.id === S.focusedCamp)
+    : getFiltered();
+  const isFocused = S.focusedCamp !== null && filtered.length > 0;
+  if(isFocused) {
+    kidTabsEl.style.display = 'none'; kidTabsEl.innerHTML = '';
+    S.expandCard = S.focusedCamp;
+    titleEl.textContent = 'Camp Info';
+    countEl.textContent = '';
+  } else {
+    titleEl.textContent = S.selWeek ? `${fmt(pd(S.selWeek))} – ${fmt(addD(pd(S.selWeek),4))}` : 'All Camps';
+    countEl.textContent = `${filtered.length} camp${filtered.length!==1?'s':''}`;
+  }
 
   const mapEl = document.getElementById('campMap');
 
@@ -1179,7 +1189,8 @@ function renderCamps() {
     return;
   }
 
-  grid.innerHTML = filtered.map(camp => {
+  const backBtn = isFocused ? `<div style="padding:.3rem 0 .65rem"><button onclick="clearFocusedCamp()" style="background:none;border:none;color:var(--primary);font-size:.83rem;font-weight:700;cursor:pointer;padding:0">← All camps</button></div>` : '';
+  grid.innerHTML = backBtn + filtered.map(camp => {
     const fri = S.selWeek ? iso(addD(pd(S.selWeek),4)) : null;
     const isExp = S.expandCard===camp.id;
     let sessInfo='', sessIdx=null;
@@ -1712,24 +1723,25 @@ function renderAll() {
   scheduleSave();
 }
 
-function selWeek(mon) { S.selWeek=S.selWeek===mon?null:mon; renderAll(); }
+function selWeek(mon) { S.selWeek=S.selWeek===mon?null:mon; S.focusedCamp=null; renderAll(); }
 function selWeekKid(mon, kidIdx) {
   if(S.selWeek===mon && S.activeKid===kidIdx) { S.selWeek=null; }
   else { S.selWeek=mon; S.activeKid=kidIdx; }
+  S.focusedCamp=null;
   renderAll();
 }
-function setActiveKid(kidIdx) { S.activeKid=kidIdx; renderAll(); }
-function toggleCard(id) { S.expandCard=S.expandCard===id?null:id; renderCamps(); }
+function setActiveKid(kidIdx) { S.activeKid=kidIdx; S.focusedCamp=null; renderAll(); }
+function toggleCard(id) { S.focusedCamp=null; S.expandCard=S.expandCard===id?null:id; renderCamps(); }
 
-function showCampCard(campId, mon, kidIdx) {
-  S.selWeek = mon;
-  S.activeKid = kidIdx ?? S.activeKid;
-  S.expandCard = campId;
-  renderWeeks();
+function showCampCard(campId) {
+  S.focusedCamp = campId;
   renderCamps();
-  requestAnimationFrame(() => {
-    document.querySelector('#campGrid .card.expanded')?.scrollIntoView({behavior:'smooth', block:'nearest'});
-  });
+}
+
+function clearFocusedCamp() {
+  S.focusedCamp = null;
+  S.expandCard = null;
+  renderCamps();
 }
 
 // ── Event listeners ───────────────────────────────────────────────────────
