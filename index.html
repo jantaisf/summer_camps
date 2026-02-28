@@ -318,9 +318,77 @@
     .member-list li { display:flex; align-items:center; gap:.5rem; font-size:.83rem;
       padding:.35rem .5rem; border-radius:7px; background:#f8f9fa; }
     .member-list li .member-dot { width:8px; height:8px; border-radius:50%; background:#34d399; flex-shrink:0; }
+
+    /* ── Recommendation Wizard ───────────────────────────────────────────── */
+    .wiz-overlay{position:fixed;inset:0;background:rgba(10,18,40,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:1050;}
+    .wiz-modal{background:white;border-radius:20px;width:580px;max-width:calc(100vw - 1.5rem);max-height:calc(100vh - 2rem);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 32px 90px rgba(0,0,0,.32);}
+    .wiz-hdr{background:linear-gradient(135deg,#0c4a6e,#0369a1 60%,#0ea5e9);color:white;padding:1.25rem 1.65rem .85rem;flex-shrink:0;}
+    .wiz-hdr h2{font-family:'Outfit',sans-serif;font-size:1.28rem;font-weight:800;margin-bottom:.18rem;}
+    .wiz-hdr p{font-size:.79rem;opacity:.82;}
+    .wiz-prog{display:flex;gap:.22rem;margin-top:.75rem;}
+    .wiz-prog-dot{height:4px;flex:1;border-radius:2px;background:rgba(255,255,255,.27);transition:background .3s;}
+    .wiz-prog-dot.on{background:rgba(255,255,255,.9);}
+    .wiz-body{flex:1;overflow-y:auto;padding:1.3rem 1.65rem;}
+    .wiz-foot{padding:.82rem 1.65rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:#fafcfe;}
+    .wiz-sec-title{font-size:.94rem;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text);margin-bottom:.18rem;}
+    .wiz-sec-sub{font-size:.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.5;}
+    .pref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:.4rem;}
+    .pref-chip{padding:.5rem .65rem;border:2px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:.38rem;font-size:.78rem;font-weight:600;color:var(--muted);transition:all .15s;user-select:none;}
+    .pref-chip:hover{border-color:var(--primary);color:var(--primary);background:#f0f9ff;}
+    .pref-chip.on{border-color:var(--primary);background:var(--primary-light);color:var(--primary);}
+    .wiz-style-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.42rem;margin-bottom:.9rem;}
+    .wiz-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:.42rem;}
+    .wiz-card{border:2px solid var(--border);border-radius:11px;padding:.72rem .88rem;cursor:pointer;transition:all .15s;}
+    .wiz-card:hover{border-color:var(--primary);background:#f0f9ff;}
+    .wiz-card.on{border-color:var(--primary);background:var(--primary-light);}
+    .wiz-card-title{font-size:.85rem;font-weight:700;color:var(--text);margin-bottom:.14rem;}
+    .wiz-card-desc{font-size:.72rem;color:var(--muted);line-height:1.4;}
+    .wiz-kid-block{border:1.5px solid var(--border);border-radius:11px;padding:.78rem .92rem;margin-bottom:.52rem;}
+    .wiz-kid-label{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.52rem;display:flex;align-items:center;gap:.35rem;}
+    .wiz-field-row{display:flex;gap:.52rem;flex-wrap:wrap;align-items:flex-end;}
+    .wf{display:flex;flex-direction:column;gap:.2rem;}
+    .wf label{font-size:.66rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+    .wf input,.wf select{padding:.36rem .56rem;border:1.5px solid var(--border);border-radius:8px;font-size:.82rem;background:white;outline:none;height:34px;}
+    .wf input:focus,.wf select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(3,105,161,.12);}
+    .wiz-toggle-row{display:flex;flex-wrap:wrap;gap:.38rem;margin-bottom:.88rem;}
+    .wiz-tgl{padding:.38rem .88rem;border:2px solid var(--border);border-radius:99px;font-size:.79rem;font-weight:700;cursor:pointer;background:white;color:var(--muted);transition:all .15s;}
+    .wiz-tgl:hover{border-color:var(--primary);color:var(--primary);}
+    .wiz-tgl.on{border-color:var(--primary);background:var(--primary-light);color:var(--primary);}
+    .wiz-rec-card{display:flex;align-items:center;gap:.68rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:.62rem .88rem;margin-bottom:.38rem;}
+    .wiz-rec-week{font-size:.69rem;font-weight:700;color:var(--muted);white-space:nowrap;min-width:74px;}
+    .wiz-rec-info{flex:1;min-width:0;}
+    .wiz-rec-name{font-size:.83rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .wiz-rec-meta{font-size:.7rem;color:var(--muted);margin-top:.05rem;}
+    .wiz-rec-who{font-size:.67rem;font-weight:700;padding:.07rem .3rem;border-radius:99px;background:white;border:1px solid var(--border);color:var(--muted);flex-shrink:0;}
+    .btn-wiz-pri{padding:.48rem 1.1rem;border-radius:8px;font-size:.83rem;font-weight:700;cursor:pointer;background:var(--primary);color:white;border:none;transition:background .15s;}
+    .btn-wiz-pri:hover{background:var(--primary-hover);}
+    .btn-wiz-sec{padding:.48rem 1.1rem;border-radius:8px;font-size:.83rem;font-weight:700;cursor:pointer;background:white;color:var(--muted);border:1.5px solid var(--border);transition:background .15s;}
+    .btn-wiz-sec:hover{background:#f4f8fb;}
+    .btn-wiz-skip{background:none;border:none;font-size:.77rem;color:var(--muted);cursor:pointer;text-decoration:underline;}
+    .wiz-trigger{padding:.33rem .82rem;border-radius:99px;background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.36);color:white;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s;}
+    .wiz-trigger:hover{background:rgba(255,255,255,.26);}
   </style>
 </head>
 <body>
+
+<!-- Recommendation Wizard -->
+<div id="wizOverlay" class="wiz-overlay" style="display:none">
+  <div class="wiz-modal">
+    <div class="wiz-hdr">
+      <h2 id="wizTitle">Find Perfect Camps</h2>
+      <p id="wizSub">Answer a few questions and we'll build a personalized plan</p>
+      <div class="wiz-prog" id="wizProg"></div>
+    </div>
+    <div class="wiz-body" id="wizBody"></div>
+    <div class="wiz-foot">
+      <button class="btn-wiz-sec" id="wizBackBtn" onclick="wizNav(-1)">Cancel</button>
+      <div style="display:flex;align-items:center;gap:.82rem">
+        <button class="btn-wiz-skip" onclick="closeWizard()">Skip for now</button>
+        <button class="btn-wiz-pri" id="wizNextBtn" onclick="wizNav(1)">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Admin panel -->
 <div id="adminPanel" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeAdmin()">
@@ -457,6 +525,19 @@
     <div class="modal-logo">🌉</div>
     <h2>SF Summer Camp Planner</h2>
     <p class="modal-sub">Sign in to save your plan across sessions</p>
+    <button id="googleSignInBtn" onclick="signInWithGoogle()"
+      style="width:100%;padding:.65rem;border:1px solid #dadce0;border-radius:8px;
+             background:#fff;display:flex;align-items:center;justify-content:center;
+             gap:.6rem;font-size:.9rem;font-weight:500;cursor:pointer;margin-bottom:1rem">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+           width="18" height="18" alt="">
+      Continue with Google
+    </button>
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:.75rem;color:var(--muted)">or</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
     <div class="modal-tabs">
       <button class="modal-tab active" id="tabSignin" onclick="switchTab('signin')">Sign in</button>
       <button class="modal-tab" id="tabSignup" onclick="switchTab('signup')">Create account</button>
@@ -481,6 +562,7 @@
     <p>Plan each child's summer week by week · Sleepaway dates verified from camp websites · Day camp dates estimated</p>
   </div>
   <div class="user-bar" id="userBar" style="display:none">
+    <button class="wiz-trigger" onclick="openWizard()">✨ Get Recommendations</button>
     <span class="user-email" id="userEmail"></span>
     <span class="save-dot" id="saveDot"></span>
     <div class="collab-area-wrap" id="collabArea"></div>
@@ -1682,6 +1764,19 @@ async function signOut() {
   await sb.auth.signOut();
 }
 
+async function signInWithGoogle() {
+  const btn = document.getElementById('googleSignInBtn');
+  if (btn) btn.disabled = true;
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.origin + location.pathname }
+  });
+  if (error) {
+    setAuthMsg(error.message);
+    if (btn) btn.disabled = false;
+  }
+}
+
 function _applyPlanData(planData) {
   if(planData?.customCamps) S.customCamps = planData.customCamps;
   if(planData?.vacation) S.vacation = planData.vacation;
@@ -2167,6 +2262,433 @@ async function loadGroupPlans() {
 }
 
 renderAll();
+
+// ══════════════════════════════════════════════════════════════════
+// ── Recommendation Wizard ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+const WIZ = {
+  step:0, numSteps:5,
+  kidCount:2,
+  kidData:[],    // [{name,age,lastDay,firstDay}]
+  prefs:[],      // activity type strings
+  style:'both',  // 'day'|'sleep'|'both'
+  budget:'',     // ''|'low'|'mid'|'high'
+  mode:'together', // 'together'|'separate'
+  _recs:[],      // [{weekLabel,campName,type,isSleep,kidLabel}]
+};
+
+const WIZ_ACT = [
+  {type:'STEM',           icon:'🔬', label:'STEM / Science'},
+  {type:'Arts',           icon:'🎨', label:'Arts & Crafts'},
+  {type:'Performing Arts',icon:'🎭', label:'Performing Arts'},
+  {type:'Sports',         icon:'⚽', label:'Sports'},
+  {type:'Nature',         icon:'🌿', label:'Nature / Outdoors'},
+  {type:'Leadership',     icon:'🏅', label:'Leadership'},
+  {type:'Traditional',    icon:'🏕', label:'Traditional'},
+  {type:'Jewish',         icon:'✡', label:'Jewish'},
+];
+
+const WIZ_TITLES = [
+  ['About Your Kids',      "Tell us how many children you're planning for, and their ages."],
+  ['Summer Dates',         'When does school end and when does it start back up?'],
+  ['Activity Interests',   'What kinds of activities do your kids enjoy? Pick all that apply.'],
+  ['Camp Preferences',     'Fine-tune your results with a few more details.'],
+  ['Your Personalized Plan','Here\'s a recommended schedule — review and add to your planner!'],
+];
+
+function openWizard() {
+  WIZ.kidCount = S.kids.length;
+  WIZ.kidData  = S.kids.map(k => ({
+    name:k.name||'', age:k.age||'',
+    lastDay:k.lastDay||'2026-06-03', firstDay:k.firstDay||'2026-08-17',
+  }));
+  while(WIZ.kidData.length < 4)
+    WIZ.kidData.push({name:'',age:'',lastDay:'2026-06-03',firstDay:'2026-08-17'});
+  WIZ.step=0; WIZ.prefs=[]; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ._recs=[];
+  document.getElementById('wizOverlay').style.display='flex';
+  wizRender();
+}
+
+function closeWizard() {
+  document.getElementById('wizOverlay').style.display='none';
+}
+
+function wizNav(dir) {
+  if(dir===1) {
+    if(!wizSave()) return;
+    if(WIZ.step===WIZ.numSteps-1){closeWizard();return;}
+    WIZ.step++;
+    if(WIZ.step===4) wizGenRecs();
+  } else {
+    if(WIZ.step===0){closeWizard();return;}
+    WIZ.step--;
+  }
+  wizRender();
+}
+
+function wizRender() {
+  const [title,sub] = WIZ_TITLES[WIZ.step];
+  document.getElementById('wizTitle').textContent = title;
+  document.getElementById('wizSub').textContent   = sub;
+  document.getElementById('wizProg').innerHTML =
+    Array.from({length:WIZ.numSteps},(_,i)=>
+      `<div class="wiz-prog-dot${i<=WIZ.step?' on':''}"></div>`).join('');
+  document.getElementById('wizBackBtn').textContent = WIZ.step===0 ? 'Cancel' : '← Back';
+  const nb = document.getElementById('wizNextBtn');
+  if(WIZ.step===WIZ.numSteps-1){nb.textContent='Done ✓';nb.style.background='#059669';}
+  else{nb.textContent='Next →';nb.style.background='';}
+  document.getElementById('wizBody').innerHTML = wizBodyHtml();
+}
+
+function wizBodyHtml() {
+  if(WIZ.step===0) return wizBody0();
+  if(WIZ.step===1) return wizBody1();
+  if(WIZ.step===2) return wizBody2();
+  if(WIZ.step===3) return wizBody3();
+  if(WIZ.step===4) return wizBody4();
+  return '';
+}
+
+// ── Step 0: Kids ──────────────────────────────────────────────────
+function wizBody0() {
+  const countBtns = [1,2,3,4].map(n=>
+    `<button class="wiz-tgl${WIZ.kidCount===n?' on':''}" onclick="wizSetKids(${n})">${n}</button>`
+  ).join('');
+  return `
+    <div class="wiz-sec-title">How many children?</div>
+    <div class="wiz-sec-sub">We'll plan camps for each of them.</div>
+    <div class="wiz-toggle-row" id="wizKidCount">${countBtns}</div>
+    <div id="wizKidFields">${wizKidFieldsHtml()}</div>`;
+}
+
+function wizKidFieldsHtml() {
+  return Array.from({length:WIZ.kidCount},(_,i)=>{
+    const kd=WIZ.kidData[i]||{};
+    const col=KID_COLORS[i];
+    return `<div class="wiz-kid-block" style="border-color:${col}30">
+      <div class="wiz-kid-label">
+        <span style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>
+        Child ${i+1}
+      </div>
+      <div class="wiz-field-row">
+        <div class="wf" style="flex:2">
+          <label>Name (optional)</label>
+          <input type="text" id="wn${i}" value="${kd.name||''}" placeholder="e.g. Emma">
+        </div>
+        <div class="wf">
+          <label>Age this summer</label>
+          <input type="number" id="wa${i}" min="4" max="18" value="${kd.age||''}" placeholder="8" style="width:72px">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function wizSetKids(n) {
+  WIZ.kidCount=n;
+  document.getElementById('wizKidCount').innerHTML=[1,2,3,4].map(x=>
+    `<button class="wiz-tgl${WIZ.kidCount===x?' on':''}" onclick="wizSetKids(${x})">${x}</button>`
+  ).join('');
+  document.getElementById('wizKidFields').innerHTML=wizKidFieldsHtml();
+}
+
+// ── Step 1: Dates ─────────────────────────────────────────────────
+function wizBody1() {
+  return Array.from({length:WIZ.kidCount},(_,i)=>{
+    const kd=WIZ.kidData[i];
+    const col=KID_COLORS[i];
+    const nm=kd.name||`Child ${i+1}`;
+    return `<div class="wiz-kid-block" style="border-color:${col}30">
+      <div class="wiz-kid-label">
+        <span style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>
+        ${nm}
+      </div>
+      <div class="wiz-field-row">
+        <div class="wf">
+          <label>Last day of school</label>
+          <input type="date" id="wld${i}" value="${kd.lastDay||'2026-06-03'}">
+        </div>
+        <div class="wf">
+          <label>First day back</label>
+          <input type="date" id="wfd${i}" value="${kd.firstDay||'2026-08-17'}">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Step 2: Activity preferences ──────────────────────────────────
+function wizBody2() {
+  const chips = WIZ_ACT.map(a=>
+    `<div class="pref-chip${WIZ.prefs.includes(a.type)?' on':''}" onclick="wizToggle('${a.type.replace("'","\\'")}',this)">
+      <span>${a.icon}</span>${a.label}
+    </div>`
+  ).join('');
+  return `
+    <div class="wiz-sec-title">What do they love?</div>
+    <div class="wiz-sec-sub">Select all that interest your kids — more choices = better matches. Leave blank to see everything.</div>
+    <div class="pref-grid">${chips}</div>`;
+}
+
+function wizToggle(type,el) {
+  if(WIZ.prefs.includes(type)){WIZ.prefs=WIZ.prefs.filter(t=>t!==type);el.classList.remove('on');}
+  else{WIZ.prefs.push(type);el.classList.add('on');}
+}
+
+// ── Step 3: Style, Budget, Mode ───────────────────────────────────
+function wizBody3() {
+  const styles=[
+    {v:'day',  icon:'☀️', title:'Day camps only',    desc:'Home every night'},
+    {v:'sleep',icon:'🌙', title:'Sleepaway welcome', desc:'Overnight adventures OK'},
+    {v:'both', icon:'✨', title:'Mix of both',       desc:'Best of both worlds'},
+  ];
+  const styleCards=styles.map(s=>
+    `<div class="wiz-card${WIZ.style===s.v?' on':''}" onclick="wizPickStyle('${s.v}',this)">
+      <div style="font-size:1.25rem;margin-bottom:.28rem">${s.icon}</div>
+      <div class="wiz-card-title">${s.title}</div>
+      <div class="wiz-card-desc">${s.desc}</div>
+    </div>`
+  ).join('');
+  const budgets=[
+    {v:'low',  label:'Budget-friendly', note:'Under $600/wk'},
+    {v:'mid',  label:'Mid-range',       note:'$600–$1,000/wk'},
+    {v:'high', label:'Premium',         note:'$1,000+/wk'},
+    {v:'',     label:'No preference',   note:'Show everything'},
+  ];
+  const budgetBtns=budgets.map(b=>
+    `<button class="wiz-tgl${WIZ.budget===b.v?' on':''}" onclick="wizPickBudget('${b.v}',this)" title="${b.note}">${b.label}</button>`
+  ).join('');
+  const modeSection=WIZ.kidCount>1?`
+    <div style="margin-top:1.05rem">
+      <div class="wiz-sec-title" style="font-size:.9rem">Plan kids together or separately?</div>
+      <div class="wiz-sec-sub">Together = same camp for all kids (easier logistics). Separately = each kid gets their own best match.</div>
+      <div class="wiz-mode-grid" id="wizModeGrid">
+        <div class="wiz-card${WIZ.mode==='together'?' on':''}" onclick="wizPickMode('together',this)">
+          <div class="wiz-card-title">👫 Together</div>
+          <div class="wiz-card-desc">Same camp, shared experience. We'll find camps that work for all ages.</div>
+        </div>
+        <div class="wiz-card${WIZ.mode==='separate'?' on':''}" onclick="wizPickMode('separate',this)">
+          <div class="wiz-card-title">🔀 Separately</div>
+          <div class="wiz-card-desc">Each kid gets the best camp for their individual age and interests.</div>
+        </div>
+      </div>
+    </div>` : '';
+  return `
+    <div class="wiz-sec-title">Camp style</div>
+    <div class="wiz-sec-sub">What kind of camps are you open to?</div>
+    <div class="wiz-style-grid" id="wizStyleGrid">${styleCards}</div>
+    <div class="wiz-sec-title" style="font-size:.9rem;margin-top:.9rem">Budget per week</div>
+    <div class="wiz-sec-sub">Helps us prioritize camps in your range.</div>
+    <div class="wiz-toggle-row" id="wizBudgetRow">${budgetBtns}</div>
+    ${modeSection}`;
+}
+
+function wizPickStyle(v,el) {
+  WIZ.style=v;
+  el.closest('#wizStyleGrid').querySelectorAll('.wiz-card').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+function wizPickBudget(v,el) {
+  WIZ.budget=v;
+  el.closest('#wizBudgetRow').querySelectorAll('.wiz-tgl').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+}
+function wizPickMode(v,el) {
+  WIZ.mode=v;
+  el.closest('#wizModeGrid').querySelectorAll('.wiz-card').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+
+// ── Step 4: Results ───────────────────────────────────────────────
+function wizBody4() {
+  if(!WIZ._recs.length) return `
+    <div style="text-align:center;padding:2.5rem 1rem">
+      <div style="font-size:2.6rem;margin-bottom:.5rem">🤔</div>
+      <div style="font-size:.95rem;font-weight:700;margin-bottom:.4rem">No matches found</div>
+      <p style="font-size:.8rem;color:var(--muted);line-height:1.6">
+        Try going back and selecting fewer activity filters, changing the camp style, or widening your budget range.
+      </p>
+    </div>`;
+  const banner=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:.68rem 1rem;margin-bottom:.9rem;font-size:.79rem;color:#166534">
+    ✅ <strong>${WIZ._recs.length} week${WIZ._recs.length===1?'':'s'}</strong> of recommended camps have been added to your "Considering" list. Review below, then promote to "Planned" when ready.
+  </div>`;
+  const items=WIZ._recs.map(r=>`
+    <div class="wiz-rec-card">
+      <div class="wiz-rec-week">${r.weekLabel}</div>
+      <div class="wiz-rec-info">
+        <div class="wiz-rec-name">${r.campName}</div>
+        <div class="wiz-rec-meta">${r.type} · ${r.isSleep?'Sleepaway':'Day camp'}</div>
+      </div>
+      ${r.kidLabel?`<span class="wiz-rec-who">${r.kidLabel}</span>`:''}
+    </div>`).join('');
+  return banner+items;
+}
+
+// ── Recommendation engine ─────────────────────────────────────────
+function wizGenRecs() {
+  if(!_campsLoaded){WIZ._recs=[];return;}
+  WIZ._recs=[];
+  const n=WIZ.kidCount;
+
+  // Sync wizard kid data into S.kids
+  while(S.kids.length<n)
+    S.kids.push({name:`Kid ${S.kids.length+1}`,lastDay:'2026-06-03',firstDay:'2026-08-17',age:'',consider:{},planned:{}});
+  S.kids=S.kids.slice(0,n);
+  S.kids.forEach((k,i)=>{
+    const wd=WIZ.kidData[i];
+    k.name=wd.name||`Kid ${i+1}`; k.age=wd.age||'';
+    k.lastDay=wd.lastDay; k.firstDay=wd.firstDay;
+    k.consider={}; k.planned={};
+  });
+  S.activeKid=0;
+  WEEKS=genAllWeeks();
+
+  // Update main app filter UI to reflect wizard choices
+  S.slFilter=WIZ.style==='both'?'':WIZ.style;
+  document.querySelectorAll('[data-sl]').forEach(b=>
+    b.classList.toggle('active',b.dataset.sl===S.slFilter));
+  document.querySelectorAll('#kidCountToggle .tgl').forEach((b,i)=>
+    b.classList.toggle('active',i+1===n));
+
+  // Scorer function
+  function scorecamp(c,ageNum) {
+    if(WIZ.style==='day'   && c.sleep)  return -1;
+    if(WIZ.style==='sleep' && !c.sleep) return -1;
+    if(c.comingSoon) return -1;
+    if(ageNum>0 && (ageNum<c.ageMin || ageNum>c.ageMax)) return -1;
+    let sc = WIZ.prefs.length ? (WIZ.prefs.includes(c.type)?10:0) : 1;
+    if(WIZ.budget==='low'  && c.costN>0&&c.costN<=600)    sc+=4;
+    if(WIZ.budget==='mid'  && c.costN>600&&c.costN<=1000) sc+=4;
+    if(WIZ.budget==='high' && c.costN>1000)               sc+=4;
+    if(!c.appRequired) sc+=1;
+    if(c.verified)     sc+=1;
+    return sc;
+  }
+
+  // Add a sleepaway session to a kid's consider list for all its covered weeks
+  function addSleepSession(k,camp,sIdx) {
+    const sess=camp.sessions[sIdx];
+    const ss=pd(sess.s), se=pd(sess.e);
+    WEEKS.forEach(w=>{
+      const wm=pd(w.mon), wf=pd(w.fri);
+      if(ss<=wf && se>=wm) {
+        if(!k.consider[w.mon]) k.consider[w.mon]=[];
+        if(!k.consider[w.mon].some(e=>e.campId===camp.id&&e.sessIdx===sIdx))
+          k.consider[w.mon].push({campId:camp.id,sessIdx:sIdx,color:camp.color,name:camp.name});
+      }
+    });
+  }
+
+  if(WIZ.mode==='together' || n===1) {
+    // Together: find camps whose age range covers all kids
+    const ages=S.kids.map(k=>parseInt(k.age)||0).filter(a=>a>0);
+    const minA=ages.length?Math.min(...ages):5;
+    const maxA=ages.length?Math.max(...ages):14;
+
+    const scored=allCamps().filter(c=>{
+      if(WIZ.style==='day'   && c.sleep)  return false;
+      if(WIZ.style==='sleep' && !c.sleep) return false;
+      if(c.comingSoon) return false;
+      if(ages.length && (c.ageMax<minA || c.ageMin>maxA)) return false;
+      return true;
+    }).map(c=>({c,s:scorecamp(c,minA)})).filter(x=>x.s>=0)
+      .sort((a,b)=>b.s-a.s);
+
+    const usedSess=new Set();
+    let ri=0;
+    WEEKS.forEach(w=>{
+      const fri=iso(addD(pd(w.mon),4));
+      if(S.kids.every(k=>k.consider[w.mon]?.length||k.planned[w.mon])) return;
+      let pick=null, pickSIdx=-1;
+      for(let a=0;a<scored.length;a++){
+        const {c}=scored[(ri+a)%scored.length];
+        if(!campAvail(c,w.mon,fri)) continue;
+        if(c.sleep){
+          const si=getSessIdx(c,w.mon,fri);
+          if(si<0) continue;
+          const key=`${c.id}-${si}`;
+          if(usedSess.has(key)) continue;
+          pick=c; pickSIdx=si; usedSess.add(key);
+        } else { pick=c; }
+        ri=(ri+a+1)%scored.length;
+        break;
+      }
+      if(!pick) return;
+      S.kids.forEach((k,ki)=>{
+        if(!kidHasWeek(ki,w.mon)) return;
+        if(k.consider[w.mon]?.length||k.planned[w.mon]) return;
+        if(pick.sleep&&pickSIdx>=0) addSleepSession(k,pick,pickSIdx);
+        else {
+          if(!k.consider[w.mon]) k.consider[w.mon]=[];
+          k.consider[w.mon].push({campId:pick.id,sessIdx:null,color:pick.color,name:pick.name});
+        }
+      });
+      if(S.kids.some((_,ki)=>kidHasWeek(ki,w.mon)))
+        WIZ._recs.push({weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
+          campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?'All kids':null});
+    });
+
+  } else {
+    // Separate: best camp per kid independently
+    S.kids.forEach((k,ki)=>{
+      const ageNum=parseInt(WIZ.kidData[ki].age)||0;
+      const kidName=k.name;
+      const kidWeeks=genWeeks(k.lastDay,k.firstDay);
+      const scored=allCamps()
+        .map(c=>({c,s:scorecamp(c,ageNum)})).filter(x=>x.s>=0)
+        .sort((a,b)=>b.s-a.s);
+      const usedSess=new Set();
+      let ri=0;
+      kidWeeks.forEach(w=>{
+        const fri=iso(addD(pd(w.mon),4));
+        if(k.consider[w.mon]?.length||k.planned[w.mon]) return;
+        let pick=null, pickSIdx=-1;
+        for(let a=0;a<scored.length;a++){
+          const {c}=scored[(ri+a)%scored.length];
+          if(!campAvail(c,w.mon,fri)) continue;
+          if(c.sleep){
+            const si=getSessIdx(c,w.mon,fri);
+            if(si<0) continue;
+            const key=`${c.id}-${si}`;
+            if(usedSess.has(key)) continue;
+            pick=c; pickSIdx=si; usedSess.add(key);
+          } else { pick=c; }
+          ri=(ri+a+1)%scored.length;
+          break;
+        }
+        if(!pick) return;
+        if(pick.sleep&&pickSIdx>=0) addSleepSession(k,pick,pickSIdx);
+        else {
+          if(!k.consider[w.mon]) k.consider[w.mon]=[];
+          k.consider[w.mon].push({campId:pick.id,sessIdx:null,color:pick.color,name:pick.name});
+        }
+        WIZ._recs.push({weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
+          campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null});
+      });
+    });
+    WIZ._recs.sort((a,b)=>a.weekLabel<b.weekLabel?-1:1);
+  }
+  renderAll();
+}
+
+// ── Persist wizard step data ──────────────────────────────────────
+function wizSave() {
+  if(WIZ.step===0) {
+    for(let i=0;i<WIZ.kidCount;i++){
+      WIZ.kidData[i].name=(document.getElementById(`wn${i}`)?.value||'').trim();
+      WIZ.kidData[i].age =document.getElementById(`wa${i}`)?.value||'';
+    }
+  } else if(WIZ.step===1) {
+    for(let i=0;i<WIZ.kidCount;i++){
+      const ld=document.getElementById(`wld${i}`)?.value;
+      const fd=document.getElementById(`wfd${i}`)?.value;
+      if(ld) WIZ.kidData[i].lastDay =ld;
+      if(fd) WIZ.kidData[i].firstDay=fd;
+    }
+  }
+  return true;
+}
 </script>
 </body>
 </html>
