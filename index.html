@@ -696,8 +696,8 @@ const CUSTOM_COLORS = ['#0369a1','#7c3aed','#059669','#d97706','#dc2626','#0891b
 // ── App state ─────────────────────────────────────────────────────────────
 const S = {
   kids: [
-    { name:"Kid 1", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} },
-    { name:"Kid 2", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} }
+    { name:"Child 1", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} },
+    { name:"Child 2", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} }
   ],
   activeKid: 0, variant: null, customCamps: [], mapView: false, vacation: {},
   slFilter:"", actFilter:"", q:"", selWeek:null, expandCard:null, appFilter:"",
@@ -1270,9 +1270,9 @@ function renderKidRows() {
     const ageOpts = `<option value="">Any age</option>` +
       Array.from({length:15},(_,j)=>`<option value="${j+4}"${k.age==j+4?' selected':''}>Age ${j+4}</option>`).join('');
     return `<div class="kid-row" style="--kid-color:${color}">
-      <div class="sg"><label>Kid ${i+1} name</label>
+      <div class="sg"><label>Child ${i+1} name</label>
         <input type="text" value="${k.name.replace(/"/g,'&quot;')}"
-          oninput="S.kids[${i}].name=this.value||'Kid ${i+1}';renderAll()" /></div>
+          oninput="S.kids[${i}].name=this.value||'Child ${i+1}';renderAll()" /></div>
       <div class="sg"><label>Last day of school</label>
         <input type="date" value="${k.lastDay}"
           onchange="S.kids[${i}].lastDay=this.value;S.selWeek=null;S.kids[${i}].consider={};S.kids[${i}].planned={};renderAll()" /></div>
@@ -1291,11 +1291,11 @@ function setKidCount(n) {
   if(n < cur) {
     const hasPlans = S.kids.slice(n).some(k =>
       Object.keys(k.planned).length>0 || Object.keys(k.consider).length>0);
-    if(hasPlans && !confirm(`Remove Kid ${cur} and clear their plans?`)) return;
+    if(hasPlans && !confirm(`Remove Child ${cur} and clear their plans?`)) return;
     S.kids = S.kids.slice(0, n);
   } else {
     for(let i=cur; i<n; i++)
-      S.kids.push({name:`Kid ${i+1}`,lastDay:'2026-06-03',firstDay:'2026-08-17',age:'',consider:{},planned:{}});
+      S.kids.push({name:`Child ${i+1}`,lastDay:'2026-06-03',firstDay:'2026-08-17',age:'',consider:{},planned:{}});
   }
   if(S.activeKid >= S.kids.length) S.activeKid = S.kids.length-1;
   document.querySelectorAll('#kidCountToggle .tgl').forEach((btn,i) =>
@@ -2598,11 +2598,11 @@ function wizGenRecs() {
 
   // Sync wizard kid data into S.kids
   while(S.kids.length<n)
-    S.kids.push({name:`Kid ${S.kids.length+1}`,lastDay:'2026-06-03',firstDay:'2026-08-17',age:'',consider:{},planned:{}});
+    S.kids.push({name:`Child ${S.kids.length+1}`,lastDay:'2026-06-03',firstDay:'2026-08-17',age:'',consider:{},planned:{}});
   S.kids=S.kids.slice(0,n);
   S.kids.forEach((k,i)=>{
     const wd=WIZ.kidData[i];
-    k.name=wd.name||`Kid ${i+1}`; k.age=wd.age||'';
+    k.name=wd.name||`Child ${i+1}`; k.age=wd.age||'';
     k.lastDay=wd.lastDay; k.firstDay=wd.firstDay;
     k.consider={}; k.planned={};
   });
