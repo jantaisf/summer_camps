@@ -660,10 +660,18 @@ function pd(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d
 function iso(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function addD(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function fmt(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
-function fmtCost(cost, costN) {
-  if(costN > 0) return '~$' + costN.toLocaleString() + '/wk';
+function fmtCost(cost, costN, isSleep=false) {
+  const suffix = isSleep ? '/session' : '/wk';
+  if(costN > 0) return '~$' + costN.toLocaleString() + suffix;
   if(cost && cost !== 'See website' && cost !== '') return cost;
   return null;
+}
+// Returns true only for the first week a sleepaway session appears in the planner.
+// Checks: session must have started after last Friday (i.e. didn't overlap previous week).
+function isFirstWeekOfSession(camp, sessIdx, mon) {
+  if(sessIdx == null || sessIdx < 0 || !camp?.sessions?.[sessIdx]) return true;
+  const prevFri = iso(addD(pd(mon), -3));
+  return pd(camp.sessions[sessIdx].s) > pd(prevFri);
 }
 function nextMon(d) {
   const r=new Date(d), day=r.getDay();
@@ -1039,12 +1047,14 @@ function renderWeeks() {
       let chips = [];
       considers.forEach(e => {
         const cc = allCamps().find(c=>c.id===e.campId);
-        const ccost = cc ? fmtCost(cc.cost, cc.costN) : null;
+        const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
+        const ccost = showCost ? fmtCost(cc.cost, cc.costN, cc.sleep) : null;
         chips.push(`<div class="wk-chip-consider"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
       });
       if(p) {
         const pc = allCamps().find(c=>c.id===p.campId);
-        const pcost = pc ? fmtCost(pc.cost, pc.costN) : null;
+        const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
+        const pcost = showCost ? fmtCost(pc.cost, pc.costN, pc.sleep) : null;
         chips.push(`<div class="wk-chip" style="background:${p.color}"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
       }
       if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
@@ -2838,7 +2848,7 @@ function wizGenRecs() {
       if(S.kids.some((_,ki)=>kidHasWeek(ki,w.mon)))
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?'All kids':null,
-          cost:fmtCost(pick.cost,pick.costN)});
+          cost:fmtCost(pick.cost,pick.costN,pick.sleep)});
     });
 
   } else {
@@ -2878,7 +2888,7 @@ function wizGenRecs() {
         }
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null,
-          cost:fmtCost(pick.cost,pick.costN)});
+          cost:fmtCost(pick.cost,pick.costN,pick.sleep)});
       });
     });
     WIZ._recs.sort((a,b)=>a.mon<b.mon?-1:a.mon>b.mon?1:0); // sort by ISO date, not display string
