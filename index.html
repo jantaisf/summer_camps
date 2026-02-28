@@ -2308,7 +2308,7 @@ const WIZ = {
   kidCount:2,
   kidData:[],        // [{name,age,lastDay,firstDay,prefs:[],_interestText:'',_detected:null}]
   style:'both',      // 'day'|'sleep'|'both'
-  budget:'',         // ''|'low'|'mid'|'high'
+  totalBudget:null,  // null=no limit, number=total summer $ cap
   mode:'together',   // 'together'|'separate'
   vacationWeeks:new Set(), // ISO mon strings to skip
   _recs:[],          // [{mon,weekLabel,campName,type,isSleep,kidLabel}]
@@ -2361,7 +2361,7 @@ function openWizard() {
   }));
   while(WIZ.kidData.length < 4)
     WIZ.kidData.push({name:'',age:'',lastDay:'2026-06-03',firstDay:'2026-08-17',prefs:[],_interestText:'',_detected:null});
-  WIZ.step=0; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[];
+  WIZ.step=0; WIZ.style='both'; WIZ.totalBudget=null; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[];
   document.getElementById('wizOverlay').style.display='flex';
   wizRender();
 }
@@ -2629,15 +2629,18 @@ function wizBody3() {
       <div class="wiz-card-desc">${s.desc}</div>
     </div>`
   ).join('');
-  const budgets=[
-    {v:'low',  label:'Budget-friendly', note:'Under $600/wk'},
-    {v:'mid',  label:'Mid-range',       note:'$600–$1,000/wk'},
-    {v:'high', label:'Premium',         note:'$1,000+/wk'},
-    {v:'',     label:'No preference',   note:'Show everything'},
-  ];
-  const budgetBtns=budgets.map(b=>
-    `<button class="wiz-tgl${WIZ.budget===b.v?' on':''}" onclick="wizPickBudget('${b.v}',this)" title="${b.note}">${b.label}</button>`
-  ).join('');
+  const budgetSet = WIZ.totalBudget !== null;
+  const budgetInput = budgetSet ? `
+    <div style="display:flex;align-items:center;gap:.55rem;margin-top:.65rem">
+      <span style="font-size:1rem;font-weight:700;color:var(--text)">$</span>
+      <input type="number" id="wizBudgetAmt" min="0" step="500"
+        value="${WIZ.totalBudget||''}"
+        placeholder="e.g. 5000"
+        style="width:130px;padding:.42rem .65rem;border:1.5px solid var(--primary);border-radius:8px;font-size:.92rem;outline:none;font-family:inherit"
+        oninput="wizSetBudgetAmt(this.value)"
+      >
+      <span style="font-size:.8rem;color:var(--muted)">total for the summer</span>
+    </div>` : '';
   const modeSection=WIZ.kidCount>1?`
     <div style="margin-top:1.05rem">
       <div class="wiz-sec-title" style="font-size:.9rem">Plan kids together or separately?</div>
@@ -2657,9 +2660,13 @@ function wizBody3() {
     <div class="wiz-sec-title">Camp style</div>
     <div class="wiz-sec-sub">What kind of camps are you open to?</div>
     <div class="wiz-style-grid" id="wizStyleGrid">${styleCards}</div>
-    <div class="wiz-sec-title" style="font-size:.9rem;margin-top:.9rem">Budget per week</div>
-    <div class="wiz-sec-sub">Helps us prioritize camps in your range.</div>
-    <div class="wiz-toggle-row" id="wizBudgetRow">${budgetBtns}</div>
+    <div class="wiz-sec-title" style="font-size:.9rem;margin-top:.9rem">Summer budget</div>
+    <div class="wiz-sec-sub">Set a total and we'll stay within it — or choose no limit.</div>
+    <div class="wiz-toggle-row" id="wizBudgetRow">
+      <button class="wiz-tgl${!budgetSet?' on':''}" onclick="wizSetBudgetMode(false,this)">No limit</button>
+      <button class="wiz-tgl${budgetSet?' on':''}" onclick="wizSetBudgetMode(true,this)">Set a budget</button>
+    </div>
+    ${budgetInput}
     ${modeSection}`;
 }
 
@@ -2668,10 +2675,16 @@ function wizPickStyle(v,el) {
   el.closest('#wizStyleGrid').querySelectorAll('.wiz-card').forEach(c=>c.classList.remove('on'));
   el.classList.add('on');
 }
-function wizPickBudget(v,el) {
-  WIZ.budget=v;
+function wizSetBudgetMode(set,el) {
+  WIZ.totalBudget = set ? 0 : null;
   el.closest('#wizBudgetRow').querySelectorAll('.wiz-tgl').forEach(b=>b.classList.remove('on'));
   el.classList.add('on');
+  document.getElementById('wizBody').innerHTML=wizBodyHtml();
+  if(set) document.getElementById('wizBudgetAmt')?.focus();
+}
+function wizSetBudgetAmt(val) {
+  const n=parseInt(val);
+  WIZ.totalBudget = (isNaN(n)||n<=0) ? 0 : n;
 }
 function wizPickMode(v,el) {
   WIZ.mode=v;
@@ -2718,7 +2731,7 @@ function wizToggleVac(mon,el) {
 function wizBody5() {
   // Filter summary bar
   const styleLabel={day:'Day only',sleep:'Sleepaway OK',both:'Day + Sleepaway'}[WIZ.style];
-  const budgetLabel={low:'<$600/wk',mid:'$600–$1k/wk',high:'$1k+/wk','':'Any budget'}[WIZ.budget];
+  const budgetLabel=WIZ.totalBudget>0?`$${WIZ.totalBudget.toLocaleString()} total`:'No limit';
   const allPrefsUnion=[...new Set(WIZ.kidData.slice(0,WIZ.kidCount).flatMap(kd=>kd.prefs))];
   let prefTags;
   if(WIZ.kidCount>1 && WIZ.mode==='separate') {
@@ -2750,8 +2763,11 @@ function wizBody5() {
       <p style="font-size:.8rem;color:var(--muted);line-height:1.6">Try fewer activity filters, a different camp style, or a wider budget. Click <strong>✏️ Refine</strong> above to adjust.</p>
     </div>`;
 
+  const budgetNote = WIZ.totalBudget>0
+    ? ` · Est. total: <strong>$${(WIZ._budgetSpent||0).toLocaleString()}</strong> of $${WIZ.totalBudget.toLocaleString()}`
+    : '';
   const banner=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.79rem;color:#166534">
-    ✅ <strong>${WIZ._recs.length} week${WIZ._recs.length===1?'':'s'}</strong> added to your "Considering" list — in chronological order. Promote any to "Planned" once you're ready to commit.
+    ✅ <strong>${WIZ._recs.length} week${WIZ._recs.length===1?'':'s'}</strong> added to your "Considering" list — in chronological order${budgetNote}. Promote any to "Planned" once you're ready to commit.
   </div>`;
   const items=WIZ._recs.map(r=>`
     <div class="wiz-rec-card">
@@ -2804,9 +2820,6 @@ function wizGenRecs() {
     if(c.comingSoon) return -1;
     if(ageNum>0 && (ageNum<c.ageMin || ageNum>c.ageMax)) return -1;
     let sc = selMaps.size ? (selMaps.has(c.type)?10:0) : 1;
-    if(WIZ.budget==='low'  && c.costN>0&&c.costN<=600)    sc+=4;
-    if(WIZ.budget==='mid'  && c.costN>600&&c.costN<=1000) sc+=4;
-    if(WIZ.budget==='high' && c.costN>1000)               sc+=4;
     if(!c.appRequired) sc+=1;
     if(c.verified)     sc+=1;
     return sc;
@@ -2827,6 +2840,23 @@ function wizGenRecs() {
           k.consider[w.mon].push({campId:camp.id,sessIdx:sIdx,color:camp.color,name:camp.name});
       }
     });
+  }
+
+  // Budget tracking — shared across all kids so the cap is a true family total
+  const cap = WIZ.totalBudget > 0 ? WIZ.totalBudget : null; // null = no limit
+  let budgetSpent = 0;
+  const budgetedSess = new Set(); // sleepaway sessions already counted (avoid double-counting multi-week spans)
+  function projCost(c, si, kids) {
+    if(!c.costN) return 0;
+    if(c.sleep && si>=0) return budgetedSess.has(`${c.id}-${si}`) ? 0 : c.costN*kids;
+    return c.costN*kids;
+  }
+  function recordCost(c, si, kids) {
+    if(!c.costN) return;
+    if(c.sleep && si>=0) {
+      const key=`${c.id}-${si}`;
+      if(!budgetedSess.has(key)){budgetedSess.add(key);budgetSpent+=c.costN*kids;}
+    } else { budgetSpent+=c.costN*kids; }
   }
 
   if(WIZ.mode==='together' || n===1) {
@@ -2857,17 +2887,19 @@ function wizGenRecs() {
       for(let a=0;a<scored.length;a++){
         const {c}=scored[(ri+a)%scored.length];
         if(!campAvail(c,w.mon,fri)) continue;
+        let si=-1;
         if(c.sleep){
-          const si=getSessIdx(c,w.mon,fri);
-          if(si<0) continue;
-          const key=`${c.id}-${si}`;
-          if(usedSess.has(key)) continue;
-          pick=c; pickSIdx=si; usedSess.add(key);
-        } else { pick=c; }
+          si=getSessIdx(c,w.mon,fri);
+          if(si<0||usedSess.has(`${c.id}-${si}`)) continue;
+        }
+        if(cap!==null && budgetSpent+projCost(c,si,n)>cap) continue; // over budget
+        if(c.sleep){usedSess.add(`${c.id}-${si}`);pickSIdx=si;}
+        pick=c;
         ri=(ri+a+1)%scored.length;
         break;
       }
       if(!pick) return;
+      recordCost(pick,pickSIdx,n);
       S.kids.forEach((k,ki)=>{
         if(!kidHasWeek(ki,w.mon)) return;
         if(k.consider[w.mon]?.length||k.planned[w.mon]) return;
@@ -2884,7 +2916,7 @@ function wizGenRecs() {
     });
 
   } else {
-    // Separate: best camp per kid independently
+    // Separate: best camp per kid independently (budget still shared across all kids)
     S.kids.forEach((k,ki)=>{
       const ageNum=parseInt(WIZ.kidData[ki].age)||0;
       const kidName=k.name;
@@ -2903,17 +2935,19 @@ function wizGenRecs() {
         for(let a=0;a<scored.length;a++){
           const {c}=scored[(ri+a)%scored.length];
           if(!campAvail(c,w.mon,fri)) continue;
+          let si=-1;
           if(c.sleep){
-            const si=getSessIdx(c,w.mon,fri);
-            if(si<0) continue;
-            const key=`${c.id}-${si}`;
-            if(usedSess.has(key)) continue;
-            pick=c; pickSIdx=si; usedSess.add(key);
-          } else { pick=c; }
+            si=getSessIdx(c,w.mon,fri);
+            if(si<0||usedSess.has(`${c.id}-${si}`)) continue;
+          }
+          if(cap!==null && budgetSpent+projCost(c,si,1)>cap) continue; // over budget
+          if(c.sleep){usedSess.add(`${c.id}-${si}`);pickSIdx=si;}
+          pick=c;
           ri=(ri+a+1)%scored.length;
           break;
         }
         if(!pick) return;
+        recordCost(pick,pickSIdx,1);
         if(pick.sleep&&pickSIdx>=0) addSleepSession(k,pick,pickSIdx);
         else {
           if(!k.consider[w.mon]) k.consider[w.mon]=[];
@@ -2926,6 +2960,7 @@ function wizGenRecs() {
     });
     WIZ._recs.sort((a,b)=>a.mon<b.mon?-1:a.mon>b.mon?1:0); // sort by ISO date, not display string
   }
+  WIZ._budgetSpent = budgetSpent; // expose for results display
   renderAll();
 }
 
