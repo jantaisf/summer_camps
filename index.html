@@ -2283,6 +2283,8 @@ const WIZ = {
   mode:'together',   // 'together'|'separate'
   vacationWeeks:new Set(), // ISO mon strings to skip
   _recs:[],          // [{mon,weekLabel,campName,type,isSleep,kidLabel}]
+  _interestText:'',  // free-text the user typed on step 2
+  _detected:null,    // null=not yet run, []=ran but no matches, [types]=matched
 };
 
 // maps: which DB camp types this interest matches
@@ -2331,7 +2333,7 @@ function openWizard() {
   }));
   while(WIZ.kidData.length < 4)
     WIZ.kidData.push({name:'',age:'',lastDay:'2026-06-03',firstDay:'2026-08-17'});
-  WIZ.step=0; WIZ.prefs=[]; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[];
+  WIZ.step=0; WIZ.prefs=[]; WIZ.style='both'; WIZ.budget=''; WIZ.mode='together'; WIZ.vacationWeeks=new Set(); WIZ._recs=[]; WIZ._interestText=''; WIZ._detected=null;
   document.getElementById('wizOverlay').style.display='flex';
   wizRender();
 }
@@ -2445,7 +2447,7 @@ function wizBody1() {
   }).join('');
 }
 
-// ── Step 2: Activity preferences ──────────────────────────────────
+// ── Step 2: Activity preferences (free-text + NLP matching) ───────
 const WIZ_GROUPS = [
   {label:'Sports & Athletics', types:['Soccer','Basketball','Tennis','Swimming','Fencing','Martial Arts','Sports']},
   {label:'Arts & Creativity',  types:['Arts','Performing Arts','Music','Dance','Film']},
@@ -2453,19 +2455,117 @@ const WIZ_GROUPS = [
   {label:'Nature & Culture',   types:['Nature','Traditional','Language','Leadership','Jewish']},
 ];
 
+// Keyword → category mapping for natural language detection
+const WIZ_KEYWORDS = {
+  'Soccer':        ['soccer','futbol','futsal','mls'],
+  'Basketball':    ['basketball','hoops','nba'],
+  'Tennis':        ['tennis'],
+  'Swimming':      ['swim','pool','aquatic','water polo','diving','synchronized swim'],
+  'Fencing':       ['fenc','foil','epee','sabre','sword'],
+  'Martial Arts':  ['karate','taekwondo','tae kwon do','judo','kung fu','jiu-jitsu','jiujitsu',
+                    'martial art','self defense','self-defense','wrestling','mma','boxing','aikido'],
+  'Sports':        ['sport','athletic','baseball','softball','volleyball','lacrosse','hockey',
+                    'gymnastics','gymnastics','track','cross country','cycling','archery','rock climbing',
+                    'equestrian','golf','crew','rowing','rugby','physical ed','fitness'],
+  'Arts':          ['visual art','drawing','draw','painting','paint','craft','ceramics','pottery',
+                    'sculpture','watercolor','illustrat','graphic design','comic','animation','creative writing'],
+  'Performing Arts':['theater','theatre','drama','acting','improv','improvisation','stage','broadway','perform'],
+  'Music':         ['music','sing','song','guitar','piano','violin','cello','instrument','band',
+                    'orchestra','choir','chorus','drum','ukulele','voice','vocal','jazz'],
+  'Dance':         ['danc','ballet','hip hop','contemporary dance','tap dance','jazz dance',
+                    'ballroom','choreograph','modern dance','breakdanc'],
+  'Film':          ['film','movie','cinema','video','filmmaking','photograph','podcast',
+                    'journalism','media','storytelling','screenwriting'],
+  'STEM':          ['science','stem','biology','chemistry','physics','astronomy','robotic',
+                    'engineer','lab','experiment','space','geology','environment science',
+                    'neuroscience','ai ','artificial intelligence','machine learning','3d print'],
+  'Coding':        ['cod','programming','computer','software','web design','html','css','python',
+                    'javascript','scratch','minecraft','game design','app','cybersecurity','hack'],
+  'Math':          ['math','algebra','geometry','calculus','statistic','number theory',
+                    'logic puzzle','olympiad','competition math','amc ','amc10','amc12'],
+  'Pre-College':   ['pre-college','precollege','academic','college prep','enrichment','gifted',
+                    'honors','advanced placement','sat prep','act prep','debate','model un'],
+  'Nature':        ['nature','outdoor','hiking','hike','wilderness','forest','garden','environment',
+                    'ecology','birdwatch','beach','ocean','marine','wildlife','backpack','camp fire',
+                    'sustainability','climate','farm','agriculture'],
+  'Traditional':   ['traditional camp','classic camp','general camp','overnight camp',
+                    'sleepaway camp','bunk','cabin','all-around camp'],
+  'Language':      ['language','spanish','french','mandarin','chinese','japanese','german',
+                    'italian','korean','arabic','portuguese','hindi','immersion','bilingual',
+                    'multilingual','foreign language','esl','second language'],
+  'Leadership':    ['leadership','community service','public speaking','volunteer','civic',
+                    'social justice','activism','entrepreneurship','business','startup'],
+  'Jewish':        ['jewish','judaism','hebrew','bar mitzvah','bat mitzvah','shabbat','jewish culture'],
+};
+
+function wizDetectInterests(text) {
+  const t = text.toLowerCase();
+  const scores = {};
+  for(const [type, words] of Object.entries(WIZ_KEYWORDS)) {
+    for(const w of words) {
+      if(t.includes(w)) scores[type] = (scores[type]||0)+1;
+    }
+  }
+  return Object.entries(scores).filter(([,s])=>s>0).sort((a,b)=>b[1]-a[1]).map(([type])=>type);
+}
+
+function wizMatchText() {
+  const el = document.getElementById('wizInterestText');
+  const text = el?.value || '';
+  WIZ._interestText = text;
+  if(!text.trim()) { WIZ._detected=[]; document.getElementById('wizBody').innerHTML=wizBodyHtml(); return; }
+  const detected = wizDetectInterests(text);
+  WIZ._detected = detected;
+  // Add newly detected to prefs (never remove manually-selected ones)
+  detected.forEach(t=>{ if(!WIZ.prefs.includes(t)) WIZ.prefs.push(t); });
+  document.getElementById('wizBody').innerHTML = wizBodyHtml();
+}
+
 function wizBody2() {
+  // Detected results banner
+  let detectedHtml = '';
+  if(WIZ._detected === null) {
+    // Not yet run — show nothing extra
+  } else if(!WIZ._detected.length) {
+    detectedHtml = `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:9px;padding:.6rem .9rem;font-size:.8rem;color:#854d0e;margin-bottom:.85rem">
+      No categories detected. Try different wording, or pick from the list below.</div>`;
+  } else {
+    const chips = WIZ._detected.map(t=>{
+      const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
+      return `<div class="pref-chip on" onclick="wizToggle('${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
+    }).join('');
+    detectedHtml = `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:.65rem .9rem;margin-bottom:.85rem">
+      <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin-bottom:.38rem">Matched interests</div>
+      <div class="pref-grid">${chips}</div>
+    </div>`;
+  }
+
+  // Full grouped chip grid
   const sections = WIZ_GROUPS.map(g=>{
     const chips = g.types.map(t=>{
       const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
       return `<div class="pref-chip${WIZ.prefs.includes(a.type)?' on':''}" onclick="wizToggle('${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
     }).join('');
-    return `<div style="margin-bottom:.85rem">
+    return `<div style="margin-bottom:.75rem">
       <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.38rem">${g.label}</div>
       <div class="pref-grid">${chips}</div>
     </div>`;
   }).join('');
+
   return `
-    <div class="wiz-sec-sub">Select all that interest your kids — more specific = better matches. Leave blank to see everything.</div>
+    <div class="wiz-sec-sub">Describe what your kids enjoy — we'll match it to camp categories. Or pick directly from the list below.</div>
+    <div style="display:flex;gap:.5rem;margin-bottom:.9rem;align-items:flex-end">
+      <textarea id="wizInterestText" rows="2"
+        placeholder='e.g. "loves soccer and coding, interested in fencing and nature hikes, pre-college academic programs"'
+        style="flex:1;padding:.58rem .72rem;border:1.5px solid var(--border);border-radius:10px;font-size:.83rem;font-family:inherit;resize:none;outline:none;line-height:1.5;transition:border-color .15s,box-shadow .15s"
+        onfocus="this.style.borderColor='var(--primary)';this.style.boxShadow='0 0 0 3px rgba(3,105,161,.12)'"
+        onblur="this.style.borderColor='var(--border)';this.style.boxShadow=''"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();wizMatchText()}"
+      >${WIZ._interestText||''}</textarea>
+      <button onclick="wizMatchText()" style="padding:.5rem .9rem;background:var(--primary);color:white;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;line-height:1.4">Match →</button>
+    </div>
+    ${detectedHtml}
+    <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.55rem">${WIZ._detected?.length?'All interests — adjust as needed':'Pick from the list'}</div>
     ${sections}`;
 }
 
@@ -2787,6 +2887,9 @@ function wizSave() {
       if(ld) WIZ.kidData[i].lastDay =ld;
       if(fd) WIZ.kidData[i].firstDay=fd;
     }
+  } else if(WIZ.step===2) {
+    const t=document.getElementById('wizInterestText')?.value;
+    if(t!=null) WIZ._interestText=t;
   }
   return true;
 }
