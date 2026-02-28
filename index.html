@@ -1715,27 +1715,36 @@ loadCamps(); // public table — no auth required
 
 async function loadCamps() {
   const { data } = await sb.from('camps')
-    .select('*').eq('active', true).order('name');
+    .select('*, sessions(*)')
+    .eq('active', true).order('name');
   if (data) {
     CAMPS = data.map(row => ({
-      id:          row.id,
-      name:        row.name,
-      type:        row.type,
-      sleep:       row.sleep,
-      verified:    row.verified,
-      appRequired: row.app_required,
-      desc:        row.description,
-      ageMin:      row.age_min,
-      ageMax:      row.age_max,
-      sessions:    row.sessions || [],
-      apply:       row.apply_info,
-      cost:        row.cost,
-      costN:       row.cost_n,
-      loc:         row.location,
-      url:         row.url,
-      color:       row.color,
-      range:       row.date_range || null,
-      comingSoon:  row.coming_soon || false,
+      id:           row.id,
+      name:         row.name,
+      type:         row.type,
+      sleep:        row.sleep,
+      verified:     row.review_status === 'verified',
+      reviewStatus: row.review_status,
+      scrapedAt:    row.scraped_at,
+      verifiedAt:   row.verified_at,
+      taxId:        row.tax_id,
+      appRequired:  row.app_required,
+      desc:         row.description,
+      ageMin:       row.age_min,
+      ageMax:       row.age_max,
+      // Normalize sessions from the joined table back to the {s, e, lbl} shape
+      // used throughout the rest of the app
+      sessions:     (row.sessions || [])
+        .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
+        .map(s => ({ id: s.id, s: s.start_date, e: s.end_date, lbl: s.label })),
+      apply:        row.apply_info,
+      cost:         row.cost,
+      costN:        row.cost_n,
+      loc:          row.location,
+      url:          row.url,
+      color:        row.color,
+      range:        row.date_range || null,
+      comingSoon:   row.coming_soon || false,
     }));
   }
   _campsLoaded = true;
