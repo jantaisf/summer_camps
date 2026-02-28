@@ -2285,15 +2285,33 @@ const WIZ = {
   _recs:[],          // [{mon,weekLabel,campName,type,isSleep,kidLabel}]
 };
 
+// maps: which DB camp types this interest matches
 const WIZ_ACT = [
-  {type:'STEM',           icon:'🔬', label:'STEM / Science'},
-  {type:'Arts',           icon:'🎨', label:'Arts & Crafts'},
-  {type:'Performing Arts',icon:'🎭', label:'Performing Arts'},
-  {type:'Sports',         icon:'⚽', label:'Sports'},
-  {type:'Nature',         icon:'🌿', label:'Nature / Outdoors'},
-  {type:'Leadership',     icon:'🏅', label:'Leadership'},
-  {type:'Traditional',    icon:'🏕', label:'Traditional'},
-  {type:'Jewish',         icon:'✡', label:'Jewish'},
+  // Sports & Athletics
+  {type:'Soccer',         icon:'⚽', label:'Soccer',                maps:['Sports']},
+  {type:'Basketball',     icon:'🏀', label:'Basketball',            maps:['Sports']},
+  {type:'Tennis',         icon:'🎾', label:'Tennis',                maps:['Sports']},
+  {type:'Swimming',       icon:'🏊', label:'Swimming',              maps:['Sports','Nature']},
+  {type:'Fencing',        icon:'🤺', label:'Fencing',               maps:['Sports']},
+  {type:'Martial Arts',   icon:'🥋', label:'Martial Arts',          maps:['Sports']},
+  {type:'Sports',         icon:'🏅', label:'Sports (General)',      maps:['Sports']},
+  // Arts & Creativity
+  {type:'Arts',           icon:'🎨', label:'Visual Arts & Crafts',  maps:['Arts']},
+  {type:'Performing Arts',icon:'🎭', label:'Theater & Drama',       maps:['Performing Arts']},
+  {type:'Music',          icon:'🎵', label:'Music',                 maps:['Performing Arts','Arts']},
+  {type:'Dance',          icon:'💃', label:'Dance',                 maps:['Performing Arts','Arts']},
+  {type:'Film',           icon:'🎬', label:'Film & Media',          maps:['Arts','Performing Arts']},
+  // STEM & Academic
+  {type:'STEM',           icon:'🔬', label:'Science & STEM',        maps:['STEM']},
+  {type:'Coding',         icon:'💻', label:'Coding & Tech',         maps:['STEM']},
+  {type:'Math',           icon:'🔢', label:'Math & Logic',          maps:['STEM']},
+  {type:'Pre-College',    icon:'🎓', label:'Pre-College / Academic',maps:['STEM','Leadership']},
+  // Nature & Culture
+  {type:'Nature',         icon:'🌿', label:'Nature & Outdoors',     maps:['Nature']},
+  {type:'Traditional',    icon:'🏕', label:'Traditional Camp',      maps:['Traditional']},
+  {type:'Language',       icon:'🌍', label:'Language Immersion',    maps:['Traditional','Leadership']},
+  {type:'Leadership',     icon:'🏆', label:'Leadership',            maps:['Leadership']},
+  {type:'Jewish',         icon:'✡', label:'Jewish',                maps:['Jewish']},
 ];
 
 const WIZ_TITLES = [
@@ -2428,16 +2446,27 @@ function wizBody1() {
 }
 
 // ── Step 2: Activity preferences ──────────────────────────────────
+const WIZ_GROUPS = [
+  {label:'Sports & Athletics', types:['Soccer','Basketball','Tennis','Swimming','Fencing','Martial Arts','Sports']},
+  {label:'Arts & Creativity',  types:['Arts','Performing Arts','Music','Dance','Film']},
+  {label:'STEM & Academic',    types:['STEM','Coding','Math','Pre-College']},
+  {label:'Nature & Culture',   types:['Nature','Traditional','Language','Leadership','Jewish']},
+];
+
 function wizBody2() {
-  const chips = WIZ_ACT.map(a=>
-    `<div class="pref-chip${WIZ.prefs.includes(a.type)?' on':''}" onclick="wizToggle('${a.type.replace("'","\\'")}',this)">
-      <span>${a.icon}</span>${a.label}
-    </div>`
-  ).join('');
+  const sections = WIZ_GROUPS.map(g=>{
+    const chips = g.types.map(t=>{
+      const a=WIZ_ACT.find(x=>x.type===t); if(!a) return '';
+      return `<div class="pref-chip${WIZ.prefs.includes(a.type)?' on':''}" onclick="wizToggle('${a.type.replace(/'/g,"\\'")}',this)"><span>${a.icon}</span>${a.label}</div>`;
+    }).join('');
+    return `<div style="margin-bottom:.85rem">
+      <div style="font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.38rem">${g.label}</div>
+      <div class="pref-grid">${chips}</div>
+    </div>`;
+  }).join('');
   return `
-    <div class="wiz-sec-title">What do they love?</div>
-    <div class="wiz-sec-sub">Select all that interest your kids — more choices = better matches. Leave blank to see everything.</div>
-    <div class="pref-grid">${chips}</div>`;
+    <div class="wiz-sec-sub">Select all that interest your kids — more specific = better matches. Leave blank to see everything.</div>
+    ${sections}`;
 }
 
 function wizToggle(type,el) {
@@ -2550,7 +2579,7 @@ function wizBody5() {
   const styleLabel={day:'Day only',sleep:'Sleepaway OK',both:'Day + Sleepaway'}[WIZ.style];
   const budgetLabel={low:'<$600/wk',mid:'$600–$1k/wk',high:'$1k+/wk','':'Any budget'}[WIZ.budget];
   const prefTags=WIZ.prefs.length
-    ? WIZ.prefs.map(p=>`<span class="wiz-filter-tag">${p}</span>`).join('')
+    ? WIZ.prefs.map(p=>{const a=WIZ_ACT.find(x=>x.type===p);return `<span class="wiz-filter-tag">${a?a.icon+' '+a.label:p}</span>`;}).join('')
     : '<span class="wiz-filter-tag">All types</span>';
   const vacNote=WIZ.vacationWeeks.size?`<span class="wiz-filter-tag">${WIZ.vacationWeeks.size} wk vacation</span>`:'';
   const modeTag=WIZ.kidCount>1?`<span class="wiz-filter-tag">${WIZ.mode==='together'?'Together':'Separately'}</span>`:'';
@@ -2616,13 +2645,18 @@ function wizGenRecs() {
   document.querySelectorAll('#kidCountToggle .tgl').forEach((b,i)=>
     b.classList.toggle('active',i+1===n));
 
+  // Build the set of DB camp types that match selected preferences via maps
+  const selMaps = new Set(
+    WIZ.prefs.flatMap(p => WIZ_ACT.find(a=>a.type===p)?.maps || [p])
+  );
+
   // Scorer function
   function scorecamp(c,ageNum) {
     if(WIZ.style==='day'   && c.sleep)  return -1;
     if(WIZ.style==='sleep' && !c.sleep) return -1;
     if(c.comingSoon) return -1;
     if(ageNum>0 && (ageNum<c.ageMin || ageNum>c.ageMax)) return -1;
-    let sc = WIZ.prefs.length ? (WIZ.prefs.includes(c.type)?10:0) : 1;
+    let sc = WIZ.prefs.length ? (selMaps.has(c.type)?10:0) : 1;
     if(WIZ.budget==='low'  && c.costN>0&&c.costN<=600)    sc+=4;
     if(WIZ.budget==='mid'  && c.costN>600&&c.costN<=1000) sc+=4;
     if(WIZ.budget==='high' && c.costN>1000)               sc+=4;
