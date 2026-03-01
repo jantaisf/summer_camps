@@ -539,6 +539,11 @@
         </div>
       </div>
     </div>
+    <div class="modal-field">
+      <label>Application deadline <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <input type="date" id="cc_app_deadline"
+        style="height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white" />
+    </div>
     <div id="cc_msg" style="font-size:.8rem;color:var(--red);min-height:1.2em;margin-bottom:.5rem"></div>
     <div style="display:flex;justify-content:flex-end;gap:.75rem">
       <button class="btn btn-outline" onclick="closeAddCampModal()">Cancel</button>
@@ -1481,6 +1486,10 @@ function renderCamps() {
           <span class="mk">Location</span><span class="mv">${locationMeta}</span>
           ${isExp && (loc?.street||camp.street) ? `<span class="mk">Address</span><span class="mv">${loc?.loc||camp.loc}</span>` : ''}
           ${camp.custom ? '' : `<span class="mk">Apply/info</span><span class="mv">${camp.apply}</span>`}
+          ${(()=>{
+            const _sd = (locsForSess||[]).flatMap(l=>l.sessions.map(s=>s.appDeadline)).filter(Boolean).sort()[0] || camp.appDeadline;
+            return _sd ? `<span class="mk">Apply by</span><span class="mv" style="color:var(--red);font-weight:600">${fmt(pd(_sd))}</span>` : '';
+          })()}
         </div>
         ${groupFriendsHtml}
       </div>
@@ -1685,6 +1694,7 @@ function openAddCampModal(editId) {
     document.getElementById('cc_all_summer').checked = !c.range;
     document.getElementById('cc_date_start').value = c.range?.s || '';
     document.getElementById('cc_date_end').value = c.range?.e || '';
+    document.getElementById('cc_app_deadline').value = c.appDeadline || '';
     setCampStyle(c.sleep ? 'sleep' : 'day');
     if(_adminCampMode) {
       _campLocations = (c.locations || []).map(l => ({
@@ -1711,6 +1721,7 @@ function openAddCampModal(editId) {
     document.getElementById('cc_all_summer').checked = true;
     document.getElementById('cc_date_start').value = '';
     document.getElementById('cc_date_end').value = '';
+    document.getElementById('cc_app_deadline').value = '';
     setCampStyle('day');
     if(_adminCampMode) {
       _campLocations = [{id:null,name:'',street:'',city:'',state:'',zip:'',url:'',_delete:false}];
@@ -1778,6 +1789,7 @@ function submitCustomCamp() {
     ageMax: parseInt(document.getElementById('cc_age_max').value) || 17,
     range,
     apply: '',
+    appDeadline: document.getElementById('cc_app_deadline').value || null,
     locations: [_customLoc],
     // Backward-compat direct fields (read-through to location)
     get street() { return this.locations[0]?.street || null; },
@@ -1874,6 +1886,7 @@ async function saveAdminCamp(camp) {
     description: camp.desc || null,
     age_min: camp.ageMin, age_max: camp.ageMax,
     apply_info: camp.apply || null,
+    app_deadline: camp.appDeadline || null,
     website_url: camp.websiteUrl || null,
     url: camp.url || null,
     color: camp.color || '#0369a1',
@@ -2178,6 +2191,7 @@ async function loadCamps() {
         ageMin:       row.age_min,
         ageMax:       row.age_max,
         apply:        row.apply_info,
+        appDeadline:  row.app_deadline || null,
         locations,
         // Backward-compat getters (single-location camps)
         get loc()    { return this.locations[0]?.loc || ''; },
