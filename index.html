@@ -220,6 +220,7 @@
     .sessions-list li.sess-considering:hover { background: #fef08a; border-color: #a16207; }
     .sess-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
     .sess-deadline { font-size: .67rem; font-weight: 700; color: #b45309; }
+    .sess-loc { font-size: .67rem; color: #64748b; }
     .sess-action { font-size: .7rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
       color: var(--primary); display: flex; align-items: center; gap: .25rem; }
     .sess-planned .sess-action { color: var(--green); }
@@ -707,6 +708,12 @@ function pd(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d
 function iso(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function addD(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function fmt(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+// Returns a location display string for a session if it differs from the camp,
+// otherwise null (meaning: use camp location).
+function sessLocStr(sess) {
+  const parts = [sess.street, sess.city, [sess.state, sess.zip].filter(Boolean).join(' ')].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
 // Format a TIME string (HH:MM or HH:MM:SS) as "9am" / "3:30pm"
 function fmtTime(t) {
   if(!t) return null;
@@ -1249,10 +1256,12 @@ function renderCamps() {
           const planned=isSessionPlanned(camp.id,i);
           const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
           const deadlineStr = s.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(s.appDeadline))}</span>` : '';
+          const locOverride = sessLocStr(s);
+          const locStr = locOverride ? `<span class="sess-loc">📍 ${locOverride}</span>` : '';
           const label=`📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}${timeStr}`;
-          if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${i})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-          if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${i})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${i})">✕</button></span></li>`;
-          return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${i})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
+          if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${i})"><span class="sess-label">${label}${locStr}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
+          if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${i})"><span class="sess-label">${label}${locStr}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${i})">✕</button></span></li>`;
+          return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${i})"><span class="sess-label">${label}${locStr}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
         }).join('')
       }</ul></div>`;
     } else {
@@ -1858,7 +1867,9 @@ async function loadCamps() {
         .map(s => ({ id: s.id, s: s.start_date, e: s.end_date, lbl: s.label,
                      cost: s.cost || null, costN: s.cost_n || 0,
                      startTime: s.start_time || null, endTime: s.end_time || null,
-                     appDeadline: s.app_deadline || null })),
+                     appDeadline: s.app_deadline || null,
+                     street: s.street_address || null, city: s.city || null,
+                     state: s.state || null, country: s.country || null, zip: s.zip || null })),
       apply:        row.apply_info,
       street:       row.street_address || null,
       city:         row.city || null,
