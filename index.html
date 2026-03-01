@@ -172,6 +172,10 @@
     .badge-day { background: #dbeafe; color: #1e40af; }
     .badge-sleep { background: #fce7f3; color: #9d174d; }
     .badge-type { background: #ddeef8; color: var(--muted); }
+    .tag-input-wrap { display:flex; flex-wrap:wrap; gap:.3rem; padding:.35rem .5rem; border:1px solid var(--border); border-radius:7px; background:white; min-height:34px; cursor:text; align-items:center; }
+    .tag-chip { display:inline-flex; align-items:center; gap:.2rem; padding:.1rem .45rem; background:#0369a1; color:white; border-radius:99px; font-size:.73rem; font-weight:700; }
+    .tag-chip-x { cursor:pointer; opacity:.7; font-size:.85rem; line-height:1; margin-left:.1rem; }
+    .tag-chip-x:hover { opacity:1; }
     .badge-apply   { background: #fef3c7; color: #92400e; }
     .badge-reg     { background: #dcfce7; color: #166534; }
     .badge-custom  { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
@@ -459,12 +463,12 @@
     </div>
     <div style="display:flex;gap:.75rem;margin-bottom:.9rem;align-items:flex-end">
       <div class="sg" style="flex:1">
-        <label>Type</label>
-        <select id="cc_type" style="width:100%;height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white">
-          <option>STEM</option><option>Arts</option><option>Performing Arts</option>
-          <option>Sports</option><option>Nature</option><option>Leadership</option>
-          <option>Traditional</option><option>Jewish</option><option>Other</option>
-        </select>
+        <label>Tags (press Enter to add)</label>
+        <div id="cc_tags_wrap" class="tag-input-wrap" onclick="document.getElementById('cc_tag_input').focus()">
+          <input type="text" id="cc_tag_input" placeholder="e.g. Coding, STEM, Tennis…"
+            style="border:none;outline:none;font-size:.82rem;min-width:90px;flex:1;background:transparent;padding:0"
+            onkeydown="handleTagInput(event)" />
+        </div>
       </div>
       <div class="sg">
         <label>Style</label>
@@ -657,9 +661,6 @@
       <label>Activity</label>
       <select id="actFilter">
         <option value="">All activities</option>
-        <option>STEM</option><option>Arts</option><option>Performing Arts</option>
-        <option>Sports</option><option>Nature</option><option>Leadership</option>
-        <option>Traditional</option><option>Jewish</option>
       </select>
     </div>
   </div>
@@ -819,10 +820,11 @@ function campPassesFilters(c) {
   if(age && (parseInt(age)<c.ageMin || parseInt(age)>c.ageMax)) return false;
   if(S.slFilter==='day' && c.sleep) return false;
   if(S.slFilter==='sleep' && !c.sleep) return false;
-  if(S.actFilter && c.type!==S.actFilter) return false;
+  const ctags = c.tags || (c.type||'').split(',').map(t=>t.trim()).filter(Boolean);
+  if(S.actFilter && !ctags.includes(S.actFilter)) return false;
   if(S.appFilter==='apply' && !c.appRequired) return false;
   if(S.appFilter==='reg' && c.appRequired) return false;
-  if(S.q && !`${c.name} ${c.desc} ${c.loc} ${c.type}`.toLowerCase().includes(S.q.toLowerCase())) return false;
+  if(S.q && !`${c.name} ${c.desc} ${c.loc} ${ctags.join(' ')}`.toLowerCase().includes(S.q.toLowerCase())) return false;
   return true;
 }
 function getFiltered() {
@@ -1334,7 +1336,7 @@ function renderCamps() {
           <div class="badges">
             ${camp.custom ? '<span class="badge badge-custom">Custom</span>' : ''}
             <span class="badge ${camp.sleep?'badge-sleep':'badge-day'}">${camp.sleep?'Sleepaway':'Day'}</span>
-            <span class="badge badge-type">${camp.type}</span>
+            ${(camp.tags||[camp.type]).map(t=>`<span class="badge badge-type">${t}</span>`).join('')}
             ${camp.custom ? '' : `<span class="badge ${camp.appRequired?'badge-apply':'badge-reg'}">${camp.appRequired?'✎ Apply':'✓ Register'}</span>`}
           </div>
           <span class="card-chevron">▼</span>
@@ -1413,6 +1415,44 @@ function updatePanelWidth() {
 let _editingCampId = null;
 let _campStyle = 'day';
 let _adminCampMode = false;
+let _campTags = [];
+
+function renderCampTags() {
+  const wrap = document.getElementById('cc_tags_wrap');
+  const input = document.getElementById('cc_tag_input');
+  // Remove existing chips
+  wrap.querySelectorAll('.tag-chip').forEach(el => el.remove());
+  _campTags.forEach((tag, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${tag}<span class="tag-chip-x" onclick="removeCampTag(${i})">×</span>`;
+    wrap.insertBefore(chip, input);
+  });
+  input.placeholder = _campTags.length ? '' : 'e.g. Coding, STEM, Tennis…';
+}
+
+function handleTagInput(e) {
+  if(e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.trim().replace(/,+$/, '');
+    if(val && !_campTags.includes(val)) { _campTags.push(val); renderCampTags(); }
+    e.target.value = '';
+  } else if(e.key === 'Backspace' && e.target.value === '' && _campTags.length) {
+    _campTags.pop(); renderCampTags();
+  }
+}
+
+function removeCampTag(i) {
+  _campTags.splice(i, 1); renderCampTags();
+}
+
+function populateActFilter() {
+  const tags = [...new Set(CAMPS.flatMap(c => c.tags || []))].sort();
+  const sel = document.getElementById('actFilter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All activities</option>' +
+    tags.map(t => `<option${t===cur?' selected':''}>${t}</option>`).join('');
+}
 
 function openAddCampModal(editId) {
   _editingCampId = editId ?? null;
@@ -1427,7 +1467,8 @@ function openAddCampModal(editId) {
     document.getElementById('cc_name').value = c.name;
     document.getElementById('cc_website_url').value = c.websiteUrl || '';
     document.getElementById('cc_url').value = c.url || '';
-    document.getElementById('cc_type').value = c.type || 'Other';
+    _campTags = [...(c.tags || (c.type||'').split(',').map(t=>t.trim()).filter(Boolean))];
+    renderCampTags();
     document.getElementById('cc_age_min').value = c.ageMin || 5;
     document.getElementById('cc_age_max').value = c.ageMax || 15;
     document.getElementById('cc_cost').value = c.cost || '';
@@ -1445,7 +1486,7 @@ function openAddCampModal(editId) {
     document.getElementById('cc_name').value = '';
     document.getElementById('cc_website_url').value = '';
     document.getElementById('cc_url').value = '';
-    document.getElementById('cc_type').value = 'STEM';
+    _campTags = []; renderCampTags();
     document.getElementById('cc_age_min').value = '5';
     document.getElementById('cc_age_max').value = '15';
     document.getElementById('cc_cost').value = '';
@@ -1496,7 +1537,8 @@ function submitCustomCamp() {
   const camp = {
     id: isEdit ? _editingCampId : (_adminCampMode ? null : -Date.now()),
     name,
-    type: document.getElementById('cc_type').value,
+    type: _campTags.join(','),
+    tags: [..._campTags],
     sleep: _campStyle === 'sleep',
     verified: false, appRequired: false,
     desc: document.getElementById('cc_desc').value.trim(),
@@ -1566,7 +1608,7 @@ function renderAdminCampsList() {
       <div style="width:6px;height:6px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:.84rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
-        <div style="font-size:.72rem;color:var(--muted)">${c.type} · ${c.sleep?'Sleepaway':'Day'} · ID ${c.id}</div>
+        <div style="font-size:.72rem;color:var(--muted)">${(c.tags||[c.type]).join(', ')} · ${c.sleep?'Sleepaway':'Day'} · ID ${c.id}</div>
       </div>
       <button class="btn btn-outline" style="padding:.18rem .45rem;font-size:.71rem;flex-shrink:0"
         onclick="openAdminEditCamp(${c.id})">Edit</button>
@@ -1596,7 +1638,7 @@ async function saveAdminCamp(camp) {
   btn.textContent = 'Saving…';
   const row = {
     ...(camp.id ? { id: camp.id } : {}),
-    name: camp.name, type: camp.type, sleep: camp.sleep,
+    name: camp.name, type: (camp.tags||[]).join(',') || camp.type || '', sleep: camp.sleep,
     app_required: camp.appRequired || false,
     description: camp.desc || null,
     age_min: camp.ageMin, age_max: camp.ageMax,
@@ -1699,7 +1741,7 @@ function renderMap(filtered) {
     marker.bindPopup(`<div style="min-width:185px">
       <div style="height:3px;background:${camp.color};margin:-2px -12px 8px;border-radius:2px 2px 0 0"></div>
       <div style="font-size:.84rem;font-weight:700;line-height:1.3;margin-bottom:3px">${camp.name}</div>
-      <div style="font-size:.71rem;color:#64748b;margin-bottom:2px">${camp.sleep?'Sleepaway':'Day'} · ${camp.type}</div>
+      <div style="font-size:.71rem;color:#64748b;margin-bottom:2px">${camp.sleep?'Sleepaway':'Day'} · ${(camp.tags||[camp.type]).join(', ')}</div>
       <div style="font-size:.71rem;color:#64748b;margin-bottom:5px">Ages ${camp.ageMin}–${camp.ageMax} · ${camp.cost}</div>
       ${camp.loc ? `<div style="font-size:.68rem;color:#94a3b8;margin-bottom:4px">${camp.loc}</div>` : ''}
       ${variesNote}${actionBtn}
@@ -1851,6 +1893,7 @@ async function loadCamps() {
       id:           row.id,
       name:         row.name,
       type:         row.type,
+      tags:         (row.type || '').split(',').map(t => t.trim()).filter(Boolean),
       sleep:        row.sleep,
       verified:     row.review_status === 'verified',
       reviewStatus: row.review_status,
@@ -1901,6 +1944,7 @@ async function loadCamps() {
     }));
   }
   _campsLoaded = true;
+  populateActFilter();
   renderAll();
 }
 
@@ -3020,7 +3064,8 @@ function wizGenRecs() {
     if(WIZ.style==='sleep' && !c.sleep) return -1;
     if(c.comingSoon) return -1;
     if(ageNum>0 && (ageNum<c.ageMin || ageNum>c.ageMax)) return -1;
-    let sc = selMaps.size ? (selMaps.has(c.type)?10:0) : 1;
+    const ctags = c.tags || (c.type||'').split(',').map(t=>t.trim()).filter(Boolean);
+    let sc = selMaps.size ? (ctags.some(t=>selMaps.has(t))?10:0) : 1;
     if(!c.appRequired) sc+=1;
     if(c.verified)     sc+=1;
     if(prefCity && (c.city?.toLowerCase()===prefCity || (c.loc && c.loc.toLowerCase().includes(prefCity)))) sc+=3;
