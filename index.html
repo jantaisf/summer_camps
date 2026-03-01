@@ -813,6 +813,7 @@ function kidHasWeek(kidIdx, weekMon) {
 function campAvail(camp, mon, fri) {
   const wm=pd(mon), wf=pd(fri);
   if(!camp.sleep) {
+    if(camp.sessions?.length) return camp.sessions.some(s => pd(s.s)<=wf && pd(s.e)>=wm);
     if(!camp.range) return true; // custom day camp with no dates = always available
     return wm>=pd(camp.range.s) && wm<=pd(camp.range.e);
   }
@@ -828,7 +829,7 @@ function findSessById(camp, sessId) {
   return null;
 }
 function getSessForWeek(camp, mon, fri) {
-  if(!camp.sleep) return null;
+  if(!camp.sleep && !camp.sessions?.length) return null;
   const wm=pd(mon), wf=pd(fri);
   for (const loc of camp.locations || []) {
     const sess = loc.sessions.find(s => pd(s.s)<=wf && pd(s.e)>=wm);
@@ -1274,14 +1275,11 @@ function renderCamps() {
         ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessForWeek?.sess?.id??null})">+ Consider</button>`
         :`<button class="btn btn-solid" disabled onclick="event.stopPropagation()">Not available</button>`;
     } else {
-      const websiteLink = camp.websiteUrl ? `<a class="btn btn-outline" href="${camp.websiteUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>` : '';
       const campInfoLink = camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : '';
-      btn = websiteLink || campInfoLink
-        ? `<div style="display:flex;gap:.4rem">${websiteLink}${campInfoLink}</div>`
-        : `<span></span>`;
+      btn = campInfoLink || `<span></span>`;
     }
     let sessionsSection='';
-    const _hasSleepSessions = camp.sleep && camp.locations?.some(l=>l.sessions.length);
+    const _hasSleepSessions = camp.locations?.some(l=>l.sessions.length);
     if(_hasSleepSessions) {
       const _multiLoc = camp.locations.filter(l=>l.sessions.length).length > 1 || camp.locations.some(l=>l.name);
       sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div><ul class="sessions-list">${
@@ -1316,7 +1314,6 @@ function renderCamps() {
     }
     const expandSection = isExp ? `<div class="card-expand" style="display:flex;justify-content:space-between;align-items:center">
       <div style="display:flex;gap:.4rem">
-        ${camp.websiteUrl ? `<a class="btn btn-outline" href="${camp.websiteUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>` : ''}
         ${camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : ''}
       </div>
       ${camp.custom ? `<div style="display:flex;gap:.5rem">
@@ -1871,7 +1868,6 @@ function renderMap(filtered) {
             ? `<button onclick="addToPlan(${camp.id},${sf?.sess?.id??null})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Consider for ${S.kids[S.activeKid].name}</button>`
             : `<div style="margin-top:6px;font-size:.72rem;color:#94a3b8">Not available this week</div>`)
         : `<div style="display:flex;gap:.5rem;margin-top:7px">
-            ${camp.websiteUrl ? `<a href="${camp.websiteUrl}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Website →</a>` : ''}
             ${(loc?.url||camp.url) ? `<a href="${loc?.url||camp.url}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Camp Info →</a>` : ''}
            </div>`;
 
