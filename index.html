@@ -1176,7 +1176,7 @@ function renderSummary() {
     return `<div class="sum-kid-row">
       <span class="sum-kid-label" style="color:${kidColors[kidIdx]}">${k.name}:</span>
       <span class="sum-stat green"><strong>${plannedCount}</strong>/${total} planned</span>
-      ${considerCount>0?`<span class="sum-stat amber"><strong>${considerCount}</strong> considering</span>`:''}
+      ${considerCount>0?`<span class="sum-stat amber"><strong>${considerCount}</strong> short listed</span>`:''}
       <span class="sum-stat"><strong>${openCount}</strong> open</span>
       ${cost>0?`<span class="sum-stat green">~<strong>$${cost.toLocaleString()}</strong></span>`:''}
     </div>`;
@@ -1391,7 +1391,7 @@ function renderCamps() {
         ? (() => { const wm=pd(S.selWeek),wf=pd(fri); return (loc.programs||[]).flatMap(p=>p.dates).some(d=>pd(d.s)<=wf&&pd(d.e)>=wm); })()
         : campAvail(camp,S.selWeek,fri);
       btn=avail
-        ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessForWeek?.sess?.id??null})">+ Consider</button>`
+        ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessForWeek?.sess?.id??null})">+ Short list</button>`
         :`<button class="btn btn-solid" disabled onclick="event.stopPropagation()">Not available</button>`;
     } else {
       const campInfoLink = (loc?.url||camp.url) ? `<a class="btn btn-outline" href="${loc?.url||camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : '';
@@ -1429,7 +1429,7 @@ function renderCamps() {
               const dateLabel=`📅 ${fmt(pd(d.s))} – ${fmt(pd(d.e))}${dateCostStr}`;
               if(planned) return `<li class="sess-planned date-row" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${d.id})"><span class="sess-label">${dateLabel}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
               if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕</button></span></li>`;
-              return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Consider</span></li>`;
+              return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Short list</span></li>`;
             });
             return [progHeader, ...dateRows];
           })];
@@ -1444,7 +1444,7 @@ function renderCamps() {
             const planned=isDayWeekPlanned(camp.id,w.mon);
             if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeDayWeekFromPlanned('${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
             if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteDayWeekToPlanned(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeDayWeekFromConsider(${camp.id},'${w.mon}')">✕</button></span></li>`;
-            return `<li onclick="event.stopPropagation();addDayWeekToConsider(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">+ Consider</span></li>`;
+            return `<li onclick="event.stopPropagation();addDayWeekToConsider(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">+ Short list</span></li>`;
           }).join('')
         }</ul></div>`;
       }
@@ -1487,7 +1487,7 @@ function renderCamps() {
         if(planned.length || considerOnly.length) {
           let parts = [];
           if(planned.length) parts.push(`<strong style="color:${color}">${member.displayName}</strong> → ${planned.join(', ')}`);
-          if(considerOnly.length) parts.push(`<strong style="color:${color}">${member.displayName}</strong> → ${considerOnly.join(', ')} <em style="color:#94a3b8">considering</em>`);
+          if(considerOnly.length) parts.push(`<strong style="color:${color}">${member.displayName}</strong> → ${considerOnly.join(', ')} <em style="color:#94a3b8">short listed</em>`);
           indicators.push(...parts);
         }
       });
@@ -2021,7 +2021,7 @@ function renderMap(filtered) {
         ? `<div style="font-size:.68rem;color:#f59e0b;margin-bottom:5px">⚠ Location varies by year — pin is approximate</div>` : '';
       const actionBtn = S.selWeek
         ? (avail
-            ? `<button onclick="addToPlan(${camp.id},${sf?.sess?.id??null})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Consider for ${S.kids[S.activeKid].name}</button>`
+            ? `<button onclick="addToPlan(${camp.id},${sf?.sess?.id??null})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Short list for ${S.kids[S.activeKid].name}</button>`
             : `<div style="margin-top:6px;font-size:.72rem;color:#94a3b8">Not available this week</div>`)
         : `<div style="display:flex;gap:.5rem;margin-top:7px">
             ${(loc?.url||camp.url) ? `<a href="${loc?.url||camp.url}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Camp Info →</a>` : ''}
@@ -3340,7 +3340,7 @@ function wizBody5() {
     : '';
   const nCamp=campRecs.length;
   const banner=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:.65rem 1rem;margin-bottom:.85rem;font-size:.79rem;color:#166534">
-    ✅ <strong>${nCamp} camp week${nCamp===1?'':'s'}</strong> added to your "Considering" list${budgetNote}. Promote any to "Planned" once you're ready to commit.
+    ✅ <strong>${nCamp} camp week${nCamp===1?'':'s'}</strong> added to your "Short list"${budgetNote}. Promote any to "Planned" once you're ready to commit.
   </div>`;
   const items=WIZ._recs.map(r=>r.vacation ? `
     <div class="wiz-rec-card" style="opacity:.55;background:#f8fafc;border-color:#e2e8f0">
