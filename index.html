@@ -2221,13 +2221,14 @@ async function loadCamps() {
             locationName: loc.name || null,
             lbl:         prog.label,
             cost:        prog.cost || null,  costN: prog.cost_n || 0,
+            memberCost:  prog.member_cost || null, memberCostN: prog.member_cost_n || 0,
             startTime:   prog.start_time || null, endTime: prog.end_time || null,
             appDeadline: prog.app_deadline || null,
             ageMin:      prog.age_min ?? null, ageMax: prog.age_max ?? null,
             virtual:     prog.virtual || false,
             dates: (prog.session_dates || [])
               .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, full: d.is_full || false, weekName: d.session_week_name || null })),
+              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, memberCost: d.member_cost || null, memberCostN: d.member_cost_n || 0, full: d.is_full || false, weekName: d.session_week_name || null })),
           })),
       }));
       return {
