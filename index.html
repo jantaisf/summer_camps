@@ -449,8 +449,12 @@
       <input type="text" id="cc_name" placeholder="e.g. Oakland Nature School" autocomplete="off" />
     </div>
     <div class="modal-field">
-      <label>Website URL</label>
-      <input type="url" id="cc_url" placeholder="https://…" autocomplete="off" />
+      <label>Main website URL</label>
+      <input type="url" id="cc_website_url" placeholder="https://campname.org" autocomplete="off" />
+    </div>
+    <div class="modal-field">
+      <label>Camp info / registration URL</label>
+      <input type="url" id="cc_url" placeholder="https://campname.org/summer-camp" autocomplete="off" />
     </div>
     <div style="display:flex;gap:.75rem;margin-bottom:.9rem;align-items:flex-end">
       <div class="sg" style="flex:1">
@@ -1231,8 +1235,10 @@ function renderCamps() {
         ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessIdx})">+ Consider</button>`
         :`<button class="btn btn-solid" disabled onclick="event.stopPropagation()">Not available</button>`;
     } else {
-      btn = camp.url
-        ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>`
+      const websiteLink = camp.websiteUrl ? `<a class="btn btn-outline" href="${camp.websiteUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>` : '';
+      const campInfoLink = camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : '';
+      btn = websiteLink || campInfoLink
+        ? `<div style="display:flex;gap:.4rem">${websiteLink}${campInfoLink}</div>`
         : `<span></span>`;
     }
     let sessionsSection='';
@@ -1264,7 +1270,10 @@ function renderCamps() {
       }
     }
     const expandSection = isExp ? `<div class="card-expand" style="display:flex;justify-content:space-between;align-items:center">
-      ${camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Visit Website →</a>` : '<span></span>'}
+      <div style="display:flex;gap:.4rem">
+        ${camp.websiteUrl ? `<a class="btn btn-outline" href="${camp.websiteUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>` : ''}
+        ${camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : ''}
+      </div>
       ${camp.custom ? `<div style="display:flex;gap:.5rem">
         <button class="btn btn-outline" style="font-size:.73rem;border-color:#94a3b8;color:#64748b" onclick="event.stopPropagation();openAddCampModal(${camp.id})">✏ Edit</button>
         <button class="btn btn-outline" style="font-size:.73rem;border-color:var(--red);color:var(--red)" onclick="event.stopPropagation();deleteCustomCamp(${camp.id})">Delete</button>
@@ -1407,6 +1416,7 @@ function openAddCampModal(editId) {
     const c = _adminCampMode ? CAMPS.find(x=>x.id===editId) : S.customCamps.find(x=>x.id===editId);
     if(!c) return;
     document.getElementById('cc_name').value = c.name;
+    document.getElementById('cc_website_url').value = c.websiteUrl || '';
     document.getElementById('cc_url').value = c.url || '';
     document.getElementById('cc_type').value = c.type || 'Other';
     document.getElementById('cc_age_min').value = c.ageMin || 5;
@@ -1424,6 +1434,7 @@ function openAddCampModal(editId) {
     setCampStyle(c.sleep ? 'sleep' : 'day');
   } else {
     document.getElementById('cc_name').value = '';
+    document.getElementById('cc_website_url').value = '';
     document.getElementById('cc_url').value = '';
     document.getElementById('cc_type').value = 'STEM';
     document.getElementById('cc_age_min').value = '5';
@@ -1493,6 +1504,7 @@ function submitCustomCamp() {
       return [this.street, this.city, [this.state, this.zip].filter(Boolean).join(' ')]
                .filter(Boolean).join(', ') || '';
     },
+    websiteUrl: document.getElementById('cc_website_url').value.trim() || null,
     url: document.getElementById('cc_url').value.trim(),
     color: existingColor || CUSTOM_COLORS[S.customCamps.length % CUSTOM_COLORS.length],
     custom: !_adminCampMode
@@ -1584,6 +1596,7 @@ async function saveAdminCamp(camp) {
     street_address: camp.street || null,
     city: camp.city || null, state: camp.state || null,
     zip: camp.zip || null, country: camp.country || null,
+    website_url: camp.websiteUrl || null,
     url: camp.url || null,
     color: camp.color || '#0369a1',
     date_range: camp.range || null,
@@ -1669,7 +1682,10 @@ function renderMap(filtered) {
       ? (avail
           ? `<button onclick="addToPlan(${camp.id},${sIdx})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Consider for ${S.kids[S.activeKid].name}</button>`
           : `<div style="margin-top:6px;font-size:.72rem;color:#94a3b8">Not available this week</div>`)
-      : (camp.url ? `<a href="${camp.url}" target="_blank" style="display:inline-block;margin-top:7px;font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Website →</a>` : '');
+      : `<div style="display:flex;gap:.5rem;margin-top:7px">
+          ${camp.websiteUrl ? `<a href="${camp.websiteUrl}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Website →</a>` : ''}
+          ${camp.url ? `<a href="${camp.url}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Camp Info →</a>` : ''}
+         </div>`;
 
     marker.bindPopup(`<div style="min-width:185px">
       <div style="height:3px;background:${camp.color};margin:-2px -12px 8px;border-radius:2px 2px 0 0"></div>
@@ -1867,6 +1883,7 @@ async function loadCamps() {
         return nums.length ? Math.min(...nums) : 0;
       },
       url:          row.url,
+      websiteUrl:   row.website_url || null,
       color:        row.color,
       range:        row.date_range || null,
       comingSoon:   row.coming_soon || false,
