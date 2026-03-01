@@ -1392,8 +1392,9 @@ function renderCamps() {
           ? camp.locations.map(l=>l.name||l.city).filter(Boolean).join(', ')
           : [camp.city, camp.state].filter(Boolean).join(', ') || camp.loc || '—');
     const cardCost = loc ? (loc.sessions[0]?.cost || camp.cost) : camp.cost;
+    const _cardArg = typeof cardKey === 'number' ? cardKey : "'" + cardKey + "'";
 
-    return `<div class="card${isExp?' expanded':''}" onclick="toggleCard(${JSON.stringify(cardKey)})">
+    return `<div class="card${isExp?' expanded':''}" onclick="toggleCard(${_cardArg})">
       <div class="card-bar" style="background:${camp.color}"></div>
       <div class="card-body">
         <div class="card-top">
