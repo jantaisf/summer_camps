@@ -1025,7 +1025,7 @@ function renderSummary() {
     const seen = new Set(); let cost = 0;
     Object.values(k.planned).forEach(e => {
       const key=`${e.campId}-${e.sessIdx}`;
-      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c) cost+=c.costN; }
+      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c){ const s=e.sessIdx!=null&&e.sessIdx>=0?c.sessions?.[e.sessIdx]:null; cost+=(s?.costN??c.costN)||0; } }
     });
     if(plannedCount>0||considerCount>0) hasAny=true;
     return `<div class="sum-kid-row">
@@ -1068,13 +1068,15 @@ function renderWeeks() {
         considers.forEach(e => {
           const cc = allCamps().find(c=>c.id===e.campId);
           const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
-          const ccost = showCost ? fmtCost(cc.cost, cc.costN, cc.sleep) : null;
+          const cSess = e.sessIdx != null && e.sessIdx >= 0 ? cc?.sessions?.[e.sessIdx] : null;
+          const ccost = showCost ? fmtCost(cSess?.cost ?? cc.cost, cSess?.costN ?? cc.costN, cc.sleep) : null;
           chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
         });
         if(p) {
           const pc = allCamps().find(c=>c.id===p.campId);
           const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
-          const pcost = showCost ? fmtCost(pc.cost, pc.costN, pc.sleep) : null;
+          const pSess = p.sessIdx != null && p.sessIdx >= 0 ? pc?.sessions?.[p.sessIdx] : null;
+          const pcost = showCost ? fmtCost(pSess?.cost ?? pc.cost, pSess?.costN ?? pc.costN, pc.sleep) : null;
           chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
         }
         if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
@@ -1538,7 +1540,6 @@ async function saveAdminCamp(camp) {
     age_min: camp.ageMin, age_max: camp.ageMax,
     sessions: camp.sessions || [],
     apply_info: camp.apply || null,
-    cost: camp.cost, cost_n: camp.costN || 0,
     location: camp.loc || null, url: camp.url || null,
     color: camp.color || '#0369a1',
     date_range: camp.range || null,
@@ -1791,14 +1792,26 @@ async function loadCamps() {
       desc:         row.description,
       ageMin:       row.age_min,
       ageMax:       row.age_max,
-      // Normalize sessions from the joined table back to the {s, e, lbl} shape
-      // used throughout the rest of the app
+      // Normalize sessions from the joined table, including per-session cost
       sessions:     (row.sessions || [])
         .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-        .map(s => ({ id: s.id, s: s.start_date, e: s.end_date, lbl: s.label })),
+        .map(s => ({ id: s.id, s: s.start_date, e: s.end_date, lbl: s.label,
+                     cost: s.cost || null, costN: s.cost_n || 0 })),
       apply:        row.apply_info,
-      cost:         row.cost,
-      costN:        row.cost_n,
+      // Derive camp-level cost summary from sessions for display and budget fallback
+      get cost() {
+        const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
+        if (nums.length) {
+          const mn = Math.min(...nums), mx = Math.max(...nums);
+          const sfx = this.sleep ? '/session' : '/wk';
+          return mn === mx ? `~$${mn.toLocaleString()}${sfx}` : `~$${mn.toLocaleString()}–$${mx.toLocaleString()}${sfx}`;
+        }
+        return this.sessions.find(s => s.cost && s.cost !== 'See website')?.cost || 'See website';
+      },
+      get costN() {
+        const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
+        return nums.length ? Math.min(...nums) : 0;
+      },
       loc:          row.location,
       url:          row.url,
       color:        row.color,
@@ -2954,17 +2967,23 @@ function wizGenRecs() {
   const cap = WIZ.totalBudget > 0 ? WIZ.totalBudget : null; // null = no limit
   let budgetSpent = 0;
   const budgetedSess = new Set(); // sleepaway sessions already counted (avoid double-counting multi-week spans)
+  function sessCostN(c, si) {
+    if(si >= 0 && c.sessions?.[si]?.costN) return c.sessions[si].costN;
+    return c.costN || 0;
+  }
   function projCost(c, si, kids) {
-    if(!c.costN) return 0;
-    if(c.sleep && si>=0) return budgetedSess.has(`${c.id}-${si}`) ? 0 : c.costN*kids;
-    return c.costN*kids;
+    const n = sessCostN(c, si);
+    if(!n) return 0;
+    if(c.sleep && si>=0) return budgetedSess.has(`${c.id}-${si}`) ? 0 : n*kids;
+    return n*kids;
   }
   function recordCost(c, si, kids) {
-    if(!c.costN) return;
+    const n = sessCostN(c, si);
+    if(!n) return;
     if(c.sleep && si>=0) {
       const key=`${c.id}-${si}`;
-      if(!budgetedSess.has(key)){budgetedSess.add(key);budgetSpent+=c.costN*kids;}
-    } else { budgetSpent+=c.costN*kids; }
+      if(!budgetedSess.has(key)){budgetedSess.add(key);budgetSpent+=n*kids;}
+    } else { budgetSpent+=n*kids; }
   }
 
   if(WIZ.mode==='together' || n===1) {
@@ -3023,7 +3042,7 @@ function wizGenRecs() {
       if(S.kids.some((_,ki)=>kidHasWeek(ki,w.mon)))
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?'All kids':null,
-          cost:fmtCost(pick.cost,pick.costN,pick.sleep)});
+          cost:fmtCost(pick.sessions?.[pickSIdx]?.cost??pick.cost,sessCostN(pick,pickSIdx),pick.sleep)});
     });
 
   } else {
@@ -3066,7 +3085,7 @@ function wizGenRecs() {
         }
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null,
-          cost:fmtCost(pick.cost,pick.costN,pick.sleep)});
+          cost:fmtCost(pick.sessions?.[pickSIdx]?.cost??pick.cost,sessCostN(pick,pickSIdx),pick.sleep)});
       });
     });
     // Add vacation entries — one per vacation week that falls in any kid's schedule
