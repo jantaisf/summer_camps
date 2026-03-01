@@ -82,22 +82,26 @@
     .week-empty { padding: 1.5rem 1rem; text-align: center; color: var(--muted);
       font-size: .82rem; line-height: 1.5; }
 
-    .week-item { display: flex; align-items: stretch; gap: .4rem; padding: .5rem .65rem;
+    .week-item { display: flex; align-items: flex-start; gap: .4rem; padding: .5rem .65rem;
       border-radius: 8px; border: 2px solid transparent; cursor: pointer;
       transition: background .12s, border-color .12s; margin-bottom: .2rem; min-height: 48px; }
     .week-item:hover { background: #e8f4fb; }
     .week-item.selected { background: var(--selected-bg); border-color: var(--selected-border); }
     .wk-num { font-size: .68rem; font-weight: 800; color: var(--muted);
-      width: 1.6rem; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-    .wk-dates { flex: 0 0 auto; min-width: 82px; display: flex; flex-direction: column; justify-content: center; }
+      width: 1.6rem; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      padding-top: .25rem; }
+    .wk-dates { flex: 0 0 auto; min-width: 82px; display: flex; flex-direction: column; justify-content: flex-start; padding-top: .15rem; }
     .wk-dates .d { font-size: .8rem; font-weight: 600; }
     .wk-dates .hol { font-size: .7rem; color: var(--amber); font-weight: 500; }
-    .wk-col { display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
-      gap: .2rem; min-width: 0; flex: 1; max-width: 130px; padding: 0 .15rem;
-      cursor: pointer; border-radius: 6px; }
-    .wk-col:hover { background: rgba(0,0,0,.03); }
-    .wk-col.k0-col { border-left: 1px solid var(--border); padding-left: .3rem; }
-    .wk-col.k1-col { border-left: 1px solid var(--border); padding-left: .3rem; }
+    .wk-kids-stack { display: flex; flex-direction: column; flex: 1; min-width: 0;
+      gap: .18rem; border-left: 1px solid var(--border); padding-left: .45rem; padding-top: .05rem; }
+    .wk-col { display: flex; flex-direction: row; align-items: center; gap: .35rem;
+      min-width: 0; width: 100%; padding: .1rem .2rem;
+      cursor: pointer; border-radius: 5px; }
+    .wk-col:hover { background: rgba(0,0,0,.04); }
+    .wk-kid-lbl { font-size: .6rem; font-weight: 800; flex-shrink: 0;
+      white-space: nowrap; min-width: 34px; letter-spacing: .02em; text-transform: uppercase; }
+    .wk-col-chips { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; flex: 1; min-width: 0; }
     .wk-na { font-size: .65rem; color: #cbd5e1; }
     .week-item.vacation { background: #fffbeb !important; }
     .week-item.vacation:hover { background: #fef3c7 !important; }
@@ -1042,51 +1046,41 @@ function renderWeeks() {
     el.innerHTML='<div class="week-empty">Enter school dates above to see your summer weeks.</div>';
     return;
   }
-  let _wkHeader = '';
-  if(S.variant === 'B') {
-    const _kidHdrs = S.kids.map((k,i) =>
-      `<div class="wk-col k${i}-col" style="justify-content:center;padding:.15rem">` +
-      `<span style="font-size:.68rem;font-weight:800;color:${KID_COLORS[i]};text-transform:uppercase;letter-spacing:.04em">${k.name}</span></div>`
-    ).join('');
-    _wkHeader = `<div style="display:flex;align-items:center;gap:.4rem;padding:.15rem .65rem .3rem;border-bottom:1px solid var(--border);margin-bottom:.15rem">` +
-      `<div style="width:1.6rem;flex-shrink:0;visibility:hidden"></div>` +
-      `<div style="min-width:82px;flex:0 0 auto;visibility:hidden;font-size:.8rem">dates</div>` +
-      `${_kidHdrs}</div>`;
-  }
-  el.innerHTML = _wkHeader + WEEKS.map((w,i) => {
+  el.innerHTML = WEEKS.map((w,i) => {
     const mon=pd(w.mon), fri=pd(w.fri);
     const isSel = S.selWeek===w.mon;
     const hol = weekHol(w.mon, w.fri);
-
     const isVacation = !!S.vacation[w.mon];
+    const multiKid = S.kids.length > 1;
 
-    const kidCols = S.kids.map((_, kidIdx) => {
-      const colCls = `wk-col k${kidIdx}-col`;
-      if(!kidHasWeek(kidIdx, w.mon)) {
-        return `<div class="${colCls}"><span class="wk-na">—</span></div>`;
-      }
-      if(isVacation) {
-        return `<div class="${colCls}"><span class="wk-vac-pill">🏖 Vacation</span></div>`;
-      }
-      const k = S.kids[kidIdx];
-      const considers = k.consider[w.mon] || [];
-      const p = k.planned[w.mon];
-      let chips = [];
-      considers.forEach(e => {
-        const cc = allCamps().find(c=>c.id===e.campId);
-        const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
-        const ccost = showCost ? fmtCost(cc.cost, cc.costN, cc.sleep) : null;
-        chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
-      });
-      if(p) {
-        const pc = allCamps().find(c=>c.id===p.campId);
-        const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
-        const pcost = showCost ? fmtCost(pc.cost, pc.costN, pc.sleep) : null;
-        chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
-      }
-      if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
-      return `<div class="${colCls}" onclick="event.stopPropagation();selWeekKid('${w.mon}',${kidIdx})">${chips.join('')}</div>`;
-    });
+    let kidsHtml;
+    if(isVacation) {
+      kidsHtml = `<span class="wk-vac-pill">🏖 Vacation</span>`;
+    } else {
+      kidsHtml = S.kids.map((k, kidIdx) => {
+        const lbl = multiKid ? `<span class="wk-kid-lbl" style="color:${KID_COLORS[kidIdx%4]}">${k.name}</span>` : '';
+        if(!kidHasWeek(kidIdx, w.mon)) {
+          return `<div class="wk-col k${kidIdx}-col">${lbl}<span class="wk-na">—</span></div>`;
+        }
+        const considers = k.consider[w.mon] || [];
+        const p = k.planned[w.mon];
+        let chips = [];
+        considers.forEach(e => {
+          const cc = allCamps().find(c=>c.id===e.campId);
+          const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
+          const ccost = showCost ? fmtCost(cc.cost, cc.costN, cc.sleep) : null;
+          chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
+        });
+        if(p) {
+          const pc = allCamps().find(c=>c.id===p.campId);
+          const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
+          const pcost = showCost ? fmtCost(pc.cost, pc.costN, pc.sleep) : null;
+          chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
+        }
+        if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
+        return `<div class="wk-col k${kidIdx}-col" onclick="event.stopPropagation();selWeekKid('${w.mon}',${kidIdx})">${lbl}<div class="wk-col-chips">${chips.join('')}</div></div>`;
+      }).join('');
+    }
 
     let cls = ['week-item'];
     if(isSel) cls.push('selected');
@@ -1115,7 +1109,7 @@ function renderWeeks() {
       <div class="wk-num" onclick="event.stopPropagation();toggleVacation('${w.mon}')" title="${isVacation?'Remove vacation block':'Block this week for vacation'}">${isVacation?'🏖':`W${i+1}`}</div>
       <div class="wk-dates"><div class="d">${fmt(mon)} – ${fmt(fri)}</div>${hol?`<div class="hol">⚠ ${hol}</div>`:''}</div>
       ${friendInitials}
-      ${kidCols.join('')}
+      <div class="wk-kids-stack">${kidsHtml}</div>
     </div>`;
   }).join('');
 }
