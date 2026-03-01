@@ -2227,7 +2227,7 @@ async function loadCamps() {
             virtual:     prog.virtual || false,
             dates: (prog.session_dates || [])
               .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, full: d.full || false })),
+              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, full: d.is_full || false })),
           })),
       }));
       return {
