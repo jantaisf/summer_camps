@@ -670,6 +670,14 @@
       </div>
     </div>
     <div class="sg">
+      <label>Format</label>
+      <div class="toggle-group">
+        <button class="tgl active" data-virt="">All</button>
+        <button class="tgl" data-virt="inperson">In-Person</button>
+        <button class="tgl" data-virt="virtual">Virtual</button>
+      </div>
+    </div>
+    <div class="sg">
       <label>Activity</label>
       <select id="actFilter">
         <option value="">All activities</option>
@@ -804,7 +812,7 @@ const S = {
     { name:"Child 2", lastDay:"2026-06-03", firstDay:"2026-08-17", age:"", consider:{}, planned:{} }
   ],
   activeKid: 0, variant: null, customCamps: [], mapView: false, vacation: {}, focusedCamp: null,
-  slFilter:"", actFilter:"", q:"", selWeek:null, expandCard:null, appFilter:"",
+  slFilter:"", actFilter:"", q:"", selWeek:null, expandCard:null, appFilter:"", virtFilter:"",
   zipFilter:"", distFilter:"", _userLat:null, _userLng:null,
   profile: { homeAddress:'', workAddress:'' },
   household: null,   // { id, ownerId, isOwner } | null
@@ -888,6 +896,15 @@ function campPassesFilters(c) {
   }
   if(S.slFilter==='day' && c.sleep) return false;
   if(S.slFilter==='sleep' && !c.sleep) return false;
+  if(S.virtFilter) {
+    const wantVirt = S.virtFilter === 'virtual';
+    const sessWithFlag = c.sessions.filter(s => s.virtual != null);
+    if(sessWithFlag.length) {
+      if(!sessWithFlag.some(s => s.virtual === wantVirt)) return false;
+    } else {
+      if(c.virtual !== wantVirt) return false;
+    }
+  }
   const ctags = c.tags || (c.type||'').split(',').map(t=>t.trim()).filter(Boolean);
   if(S.actFilter && !ctags.includes(S.actFilter)) return false;
   if(S.appFilter==='apply' && !c.appRequired) return false;
@@ -1377,19 +1394,23 @@ function renderCamps() {
           if(!l.sessions.length) return [];
           const locHeader = (_multiLoc && l.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${l.name}${l.loc?' · <span style="font-weight:400">'+l.loc+'</span>':''}</li>`] : [];
           const _age = parseInt(S.kids[S.activeKid].age) || 0;
-          const _visibleSess = l.sessions.filter(s =>
-            !_age || s.ageMin==null && s.ageMax==null ||
-            (s.ageMin==null||_age>=s.ageMin) && (s.ageMax==null||_age<=s.ageMax)
-          );
+          const _visibleSess = l.sessions.filter(s => {
+            if(_age && !(s.ageMin==null && s.ageMax==null) &&
+               !((s.ageMin==null||_age>=s.ageMin) && (s.ageMax==null||_age<=s.ageMax))) return false;
+            if(S.virtFilter==='virtual' && !s.virtual) return false;
+            if(S.virtFilter==='inperson' && s.virtual) return false;
+            return true;
+          });
           return [...locHeader, ..._visibleSess.map(s=>{
             const considering=isSessionConsidering(camp.id,s.id);
             const planned=isSessionPlanned(camp.id,s.id);
             const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
             const deadlineStr = s.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(s.appDeadline))}</span>` : '';
+            const virtBadge = s.virtual ? `<span style="font-size:.68rem;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:.05rem .3rem;margin-left:.3rem;font-weight:600">Virtual</span>` : '';
             const label=`📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}${timeStr}`;
-            if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${s.id})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${s.id})">✕</button></span></li>`;
-            return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
+            if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${s.id})"><span class="sess-label">${label}${virtBadge}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
+            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${virtBadge}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${s.id})">✕</button></span></li>`;
+            return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${virtBadge}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
           })];
         }).join('')
       }</ul></div>`;
@@ -2109,6 +2130,10 @@ document.querySelectorAll('.tgl[data-app]').forEach(b=>b.addEventListener('click
   document.querySelectorAll('.tgl[data-app]').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); S.appFilter=b.dataset.app; renderAll();
 }));
+document.querySelectorAll('.tgl[data-virt]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tgl[data-virt]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); S.virtFilter=b.dataset.virt; renderAll();
+}));
 document.getElementById('actFilter').addEventListener('change', e=>{ S.actFilter=e.target.value; renderAll(); });
 document.getElementById('campSearch').addEventListener('input', e=>{ S.q=e.target.value; renderAll(); });
 document.getElementById('distFilter').addEventListener('change', e=>{ S.distFilter=e.target.value; renderCamps(); });
@@ -2173,6 +2198,7 @@ async function loadCamps() {
             startTime:   s.start_time || null, endTime: s.end_time || null,
             appDeadline: s.app_deadline || null,
             ageMin:      s.age_min ?? null, ageMax: s.age_max ?? null,
+            virtual:     s.virtual || false,
           })),
       }));
       return {
@@ -2192,6 +2218,7 @@ async function loadCamps() {
         ageMax:       row.age_max,
         apply:        row.apply_info,
         appDeadline:  row.app_deadline || null,
+        virtual:      row.virtual || false,
         locations,
         // Backward-compat getters (single-location camps)
         get loc()    { return this.locations[0]?.loc || ''; },
