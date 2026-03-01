@@ -234,6 +234,12 @@
     .sess-remove-btn:hover { opacity: 1; }
     .card-chevron { font-size: .7rem; color: var(--muted); transition: transform .2s; flex-shrink: 0; }
     .card.expanded .card-chevron { transform: rotate(180deg); }
+    .prog-header { list-style:none; font-size:.78rem; font-weight:700;
+      padding:.5rem 0 .15rem; border-top:1px solid var(--border); margin-top:.25rem;
+      display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+    .prog-header:first-child { border-top:none; margin-top:0; }
+    .prog-meta { font-size:.7rem; color:var(--muted); font-weight:400; }
+    .date-row { padding-left:.9rem; }
 
     /* ── Auth modal ── */
     .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6);
@@ -767,7 +773,7 @@ function fmtCost(cost, costN, isSleep=false) {
 // Checks: session must have started after last Friday (i.e. didn't overlap previous week).
 function isFirstWeekOfSession(camp, sessId, mon) {
   if(sessId == null) return true;
-  const found = findSessById(camp, sessId);
+  const found = findDateById(camp, sessId);
   if(!found) return true;
   const prevFri = iso(addD(pd(mon), -3));
   return pd(found.sess.s) > pd(prevFri);
@@ -840,29 +846,34 @@ function kidHasWeek(kidIdx, weekMon) {
 // ── Availability ──────────────────────────────────────────────────────────
 function campAvail(camp, mon, fri) {
   const wm=pd(mon), wf=pd(fri);
+  const allDates = (camp.locations||[]).flatMap(l=>(l.programs||[]).flatMap(p=>p.dates));
   if(!camp.sleep) {
-    if(camp.sessions?.length) return camp.sessions.some(s => pd(s.s)<=wf && pd(s.e)>=wm);
+    if(allDates.length) return allDates.some(d=>pd(d.s)<=wf&&pd(d.e)>=wm);
     if(!camp.range) return true; // custom day camp with no dates = always available
-    return wm>=pd(camp.range.s) && wm<=pd(camp.range.e);
+    return wm>=pd(camp.range.s)&&wm<=pd(camp.range.e);
   }
-  if(!camp.sessions?.length) return true; // custom sleepaway with no sessions = always available
-  return camp.sessions.some(s => pd(s.s)<=wf && pd(s.e)>=wm);
+  if(!allDates.length) return true; // custom sleepaway with no dates = always available
+  return allDates.some(d=>pd(d.s)<=wf&&pd(d.e)>=wm);
 }
-// Returns {sess, loc} for the session overlapping [mon,fri], or null.
-function findSessById(camp, sessId) {
+// Returns {sess, loc} for the session_date with the given id, or null.
+function findDateById(camp, dateId) {
   for (const loc of camp.locations || []) {
-    const sess = loc.sessions.find(s => s.id === sessId);
-    if (sess) return { sess, loc };
+    for (const prog of loc.programs || []) {
+      const date = prog.dates.find(d => d.id === dateId);
+      if (date) return { sess: {...prog, s: date.s, e: date.e, id: date.id}, loc };
+    }
   }
   return null;
 }
 function getSessForWeek(camp, mon, fri) {
-  if(!camp.sleep && !camp.sessions?.length) return null;
   const wm=pd(mon), wf=pd(fri);
-  for (const loc of camp.locations || []) {
-    const sess = loc.sessions.find(s => pd(s.s)<=wf && pd(s.e)>=wm);
-    if (sess) return { sess, loc };
+  for(const loc of camp.locations||[]) {
+    for(const prog of loc.programs||[]) {
+      const date = prog.dates.find(d => pd(d.s)<=wf && pd(d.e)>=wm);
+      if(date) return { sess:{...prog, s:date.s, e:date.e, id:date.id}, loc };
+    }
   }
+  if(!camp.sleep && !camp.sessions?.length) return null;
   return null;
 }
 function haversineMi(lat1, lng1, lat2, lng2) {
@@ -886,9 +897,9 @@ function campPassesFilters(c) {
   const age = S.kids[S.activeKid].age;
   if(age) {
     const ageNum = parseInt(age);
-    const sessWithAge = c.sessions.filter(s => s.ageMin!=null || s.ageMax!=null);
-    if(sessWithAge.length) {
-      if(!sessWithAge.some(s=>(s.ageMin==null||ageNum>=s.ageMin)&&(s.ageMax==null||ageNum<=s.ageMax))) return false;
+    const progsWithAge = c.locations.flatMap(l=>l.programs||[]).filter(p=>p.ageMin!=null||p.ageMax!=null);
+    if(progsWithAge.length) {
+      if(!progsWithAge.some(p=>(p.ageMin==null||ageNum>=p.ageMin)&&(p.ageMax==null||ageNum<=p.ageMax))) return false;
     } else {
       if(c.ageMin && ageNum<c.ageMin) return false;
       if(c.ageMax && ageNum>c.ageMax) return false;
@@ -898,11 +909,11 @@ function campPassesFilters(c) {
   if(S.slFilter==='sleep' && !c.sleep) return false;
   if(S.virtFilter) {
     const wantVirt = S.virtFilter === 'virtual';
-    const sessWithFlag = c.sessions.filter(s => s.virtual != null);
-    if(sessWithFlag.length) {
-      if(!sessWithFlag.some(s => s.virtual === wantVirt)) return false;
+    const progsWithVirt = c.locations.flatMap(l=>l.programs||[]);
+    if(progsWithVirt.length) {
+      if(!progsWithVirt.some(p=>p.virtual===wantVirt)) return false;
     } else {
-      if(c.virtual !== wantVirt) return false;
+      if(c.virtual!==wantVirt) return false;
     }
   }
   const ctags = c.tags || (c.type||'').split(',').map(t=>t.trim()).filter(Boolean);
@@ -953,7 +964,7 @@ function addSessionToConsider(campId, sessId, locationId, locationName) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
   if(!camp||!camp.sleep) return;
-  const found=findSessById(camp, sessId);
+  const found=findDateById(camp, sessId);
   if(!found) return;
   const {sess}=found;
   const ss=pd(sess.s), se=pd(sess.e);
@@ -1000,7 +1011,7 @@ function promoteSessionToPlanned(campId, sessId, locationId, locationName) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
   if(!camp||!camp.sleep) return;
-  const found=findSessById(camp, sessId);
+  const found=findDateById(camp, sessId);
   if(!found) return;
   const {sess}=found;
   const ss=pd(sess.s), se=pd(sess.e);
@@ -1048,7 +1059,7 @@ function promoteConsiderChip(weekMon, campId, sessId, kidIdx) {
   const camp = allCamps().find(c=>c.id===campId);
   if(!camp) return;
   if(camp.sleep && sessId != null) {
-    const found=findSessById(camp, sessId);
+    const found=findDateById(camp, sessId);
     if(!found) return;
     const {sess,loc}=found;
     const ss=pd(sess.s), se=pd(sess.e);
@@ -1114,7 +1125,7 @@ function addToPlan(campId, sessId) {
     if(!k.consider[S.selWeek].some(e=>e.campId===campId))
       k.consider[S.selWeek].push({campId,sessId:null,locationId:null,locationName:null,color:camp.color,name:camp.name});
   } else {
-    const found=sessId!=null?findSessById(camp,sessId):null;
+    const found=sessId!=null?findDateById(camp,sessId):null;
     if(!found) return;
     const {sess,loc}=found;
     const ss=pd(sess.s), se=pd(sess.e);
@@ -1159,7 +1170,7 @@ function renderSummary() {
     const seen = new Set(); let cost = 0;
     Object.values(k.planned).forEach(e => {
       const key=`${e.campId}-${e.sessId}`;
-      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c){ const found=e.sessId!=null?findSessById(c,e.sessId):null; cost+=(found?.sess?.costN??c.costN)||0; } }
+      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c){ const found=e.sessId!=null?findDateById(c,e.sessId):null; cost+=(found?.sess?.costN??c.costN)||0; } }
     });
     if(plannedCount>0||considerCount>0) hasAny=true;
     return `<div class="sum-kid-row">
@@ -1202,14 +1213,14 @@ function renderWeeks() {
         considers.forEach(e => {
           const cc = allCamps().find(c=>c.id===e.campId);
           const showCost = cc && isFirstWeekOfSession(cc, e.sessId, w.mon);
-          const cSess = e.sessId != null ? findSessById(cc, e.sessId)?.sess : null;
+          const cSess = e.sessId != null ? findDateById(cc, e.sessId)?.sess : null;
           const ccost = showCost ? fmtCost(cSess?.cost ?? cc.cost, cSess?.costN ?? cc.costN, cc.sleep) : null;
           chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessId},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessId},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
         });
         if(p) {
           const pc = allCamps().find(c=>c.id===p.campId);
           const showCost = pc && isFirstWeekOfSession(pc, p.sessId, w.mon);
-          const pSess = p.sessId != null ? findSessById(pc, p.sessId)?.sess : null;
+          const pSess = p.sessId != null ? findDateById(pc, p.sessId)?.sess : null;
           const pcost = showCost ? fmtCost(pSess?.cost ?? pc.cost, pSess?.costN ?? pc.costN, pc.sleep) : null;
           chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
         }
@@ -1296,7 +1307,7 @@ function renderCamps() {
     titleEl.textContent = S.selWeek ? `${fmt(pd(S.selWeek))} – ${fmt(addD(pd(S.selWeek),4))}` : 'All Camps';
     // Count cards (multi-location camps expand to one card per location)
     const _cardCount = filtered.reduce((n,c) => {
-      const nl = (c.locations||[]).filter(l=>l.name&&l.sessions.length);
+      const nl = (c.locations||[]).filter(l=>l.name&&l.programs?.some(p=>p.dates.length));
       return n + (nl.length > 1 ? nl.length : 1);
     }, 0);
     countEl.textContent = `${_cardCount} camp${_cardCount!==1?'s':''}`;
@@ -1331,10 +1342,10 @@ function renderCamps() {
   for (const camp of filtered) {
     const _kidAge = parseInt(S.kids[S.activeKid].age) || 0;
     const namedLocs = (camp.locations || []).filter(l => {
-      if (!l.name || !l.sessions.length) return false;
+      if (!l.name || !l.programs?.some(p => p.dates.length)) return false;
       if (_kidAge) {
-        const sw = l.sessions.filter(s => s.ageMin!=null || s.ageMax!=null);
-        if (sw.length && !sw.some(s=>(s.ageMin==null||_kidAge>=s.ageMin)&&(s.ageMax==null||_kidAge<=s.ageMax))) return false;
+        const pw = (l.programs||[]).filter(p => p.ageMin!=null || p.ageMax!=null);
+        if (pw.length && !pw.some(p=>(p.ageMin==null||_kidAge>=p.ageMin)&&(p.ageMax==null||_kidAge<=p.ageMax))) return false;
       }
       if (S._userLat!=null && S.distFilter && l.lat!=null && l.lng!=null) {
         if (haversineMi(S._userLat,S._userLng,l.lat,l.lng) > parseFloat(S.distFilter)) return false;
@@ -1356,8 +1367,10 @@ function renderCamps() {
     if(S.selWeek) {
       if(loc) {
         const wm=pd(S.selWeek), wf=pd(fri);
-        const sess = loc.sessions.find(s => pd(s.s)<=wf && pd(s.e)>=wm);
-        if(sess) sessForWeek = {sess, loc};
+        for(const prog of loc.programs||[]) {
+          const date = prog.dates.find(d => pd(d.s)<=wf && pd(d.e)>=wm);
+          if(date) { sessForWeek = {sess:{...prog,s:date.s,e:date.e,id:date.id}, loc}; break; }
+        }
       } else {
         sessForWeek = getSessForWeek(camp, S.selWeek, fri);
       }
@@ -1375,7 +1388,7 @@ function renderCamps() {
     let btn;
     if(S.selWeek){
       const avail = loc
-        ? (() => { const wm=pd(S.selWeek),wf=pd(fri); return loc.sessions.some(s=>pd(s.s)<=wf&&pd(s.e)>=wm); })()
+        ? (() => { const wm=pd(S.selWeek),wf=pd(fri); return (loc.programs||[]).flatMap(p=>p.dates).some(d=>pd(d.s)<=wf&&pd(d.e)>=wm); })()
         : campAvail(camp,S.selWeek,fri);
       btn=avail
         ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessForWeek?.sess?.id??null})">+ Consider</button>`
@@ -1386,31 +1399,38 @@ function renderCamps() {
     }
     let sessionsSection='';
     const locsForSess = loc ? [loc] : camp.locations;
-    const _hasSleepSessions = locsForSess?.some(l=>l.sessions.length);
+    const _hasSleepSessions = locsForSess?.some(l => l.programs?.some(p => p.dates.length));
     if(_hasSleepSessions) {
-      const _multiLoc = !loc && (locsForSess.filter(l=>l.sessions.length).length > 1 || locsForSess.some(l=>l.name));
+      const _multiLoc = !loc && (locsForSess.filter(l=>l.programs?.some(p=>p.dates.length)).length > 1 || locsForSess.some(l=>l.name));
+      const _age = parseInt(S.kids[S.activeKid].age) || 0;
       sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div><ul class="sessions-list">${
         locsForSess.flatMap(l=>{
-          if(!l.sessions.length) return [];
+          if(!l.programs?.some(p=>p.dates.length)) return [];
           const locHeader = (_multiLoc && l.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${l.name}${l.loc?' · <span style="font-weight:400">'+l.loc+'</span>':''}</li>`] : [];
-          const _age = parseInt(S.kids[S.activeKid].age) || 0;
-          const _visibleSess = l.sessions.filter(s => {
-            if(_age && !(s.ageMin==null && s.ageMax==null) &&
-               !((s.ageMin==null||_age>=s.ageMin) && (s.ageMax==null||_age<=s.ageMax))) return false;
-            if(S.virtFilter==='virtual' && !s.virtual) return false;
-            if(S.virtFilter==='inperson' && s.virtual) return false;
+          const _visibleProgs = (l.programs||[]).filter(prog => {
+            if(!prog.dates.length) return false;
+            if(_age && !(prog.ageMin==null && prog.ageMax==null) &&
+               !((prog.ageMin==null||_age>=prog.ageMin) && (prog.ageMax==null||_age<=prog.ageMax))) return false;
+            if(S.virtFilter==='virtual' && !prog.virtual) return false;
+            if(S.virtFilter==='inperson' && prog.virtual) return false;
             return true;
           });
-          return [...locHeader, ..._visibleSess.map(s=>{
-            const considering=isSessionConsidering(camp.id,s.id);
-            const planned=isSessionPlanned(camp.id,s.id);
-            const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
-            const deadlineStr = s.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(s.appDeadline))}</span>` : '';
-            const virtBadge = s.virtual ? `<span style="font-size:.68rem;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:.05rem .3rem;margin-left:.3rem;font-weight:600">Virtual</span>` : '';
-            const label=`📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}${timeStr}`;
-            if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${s.id})"><span class="sess-label">${label}${virtBadge}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${virtBadge}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${s.id})">✕</button></span></li>`;
-            return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${virtBadge}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
+          return [...locHeader, ..._visibleProgs.flatMap(prog=>{
+            const timeStr = (prog.startTime||prog.endTime) ? ` · ${[fmtTime(prog.startTime),fmtTime(prog.endTime)].filter(Boolean).join('–')}` : '';
+            const ageStr = (prog.ageMin!=null||prog.ageMax!=null) ? ` Ages ${prog.ageMin??''}${(prog.ageMin!=null&&prog.ageMax!=null)?'–':''}${prog.ageMax??''}` : '';
+            const costStr = prog.costN>0 ? ` $${prog.costN.toLocaleString()}` : (prog.cost&&prog.cost!=='See website'?` ${prog.cost}`:'');
+            const virtBadge = prog.virtual ? `<span style="font-size:.68rem;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:.05rem .3rem;margin-left:.3rem;font-weight:600">Virtual</span>` : '';
+            const deadlineStr = prog.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(prog.appDeadline))}</span>` : '';
+            const progHeader = `<li class="prog-header">${prog.lbl}${virtBadge}<span class="prog-meta">${ageStr}${costStr}${timeStr}</span>${deadlineStr}</li>`;
+            const dateRows = prog.dates.map(d=>{
+              const considering=isSessionConsidering(camp.id,d.id);
+              const planned=isSessionPlanned(camp.id,d.id);
+              const dateLabel=`📅 ${fmt(pd(d.s))} – ${fmt(pd(d.e))}`;
+              if(planned) return `<li class="sess-planned date-row" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${d.id})"><span class="sess-label">${dateLabel}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
+              if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕</button></span></li>`;
+              return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Consider</span></li>`;
+            });
+            return [progHeader, ...dateRows];
           })];
         }).join('')
       }</ul></div>`;
@@ -1480,7 +1500,7 @@ function renderCamps() {
       : (camp.locations?.length > 1
           ? camp.locations.map(l=>l.name||l.city).filter(Boolean).join(', ')
           : [camp.city, camp.state].filter(Boolean).join(', ') || camp.loc || '—');
-    const cardCost = loc ? (loc.sessions[0]?.cost || camp.cost) : camp.cost;
+    const cardCost = loc ? ((loc.programs||[])[0]?.cost || camp.cost) : camp.cost;
     const _cardArg = typeof cardKey === 'number' ? cardKey : "'" + cardKey + "'";
 
     return `<div class="card${isExp?' expanded':''}" onclick="toggleCard(${_cardArg})">
@@ -1508,7 +1528,7 @@ function renderCamps() {
           ${isExp && (loc?.street||camp.street) ? `<span class="mk">Address</span><span class="mv">${loc?.loc||camp.loc}</span>` : ''}
           ${camp.custom ? '' : `<span class="mk">Apply/info</span><span class="mv">${camp.apply}</span>`}
           ${(()=>{
-            const _sd = (locsForSess||[]).flatMap(l=>l.sessions.map(s=>s.appDeadline)).filter(Boolean).sort()[0] || camp.appDeadline;
+            const _sd = (locsForSess||[]).flatMap(l=>(l.programs||[]).map(p=>p.appDeadline)).filter(Boolean).sort()[0] || camp.appDeadline;
             return _sd ? `<span class="mk">Apply by</span><span class="mv" style="color:var(--red);font-weight:600">${fmt(pd(_sd))}</span>` : '';
           })()}
         </div>
@@ -2167,7 +2187,7 @@ loadCamps(); // public table — no auth required
 
 async function loadCamps() {
   const { data } = await sb.from('camps')
-    .select('*, locations(*, sessions(*))')
+    .select('*, locations(*, programs(*, session_dates(*)))')
     .eq('active', true).order('name');
   if (data) {
     CAMPS = data.map(row => {
@@ -2187,18 +2207,22 @@ async function loadCamps() {
           return [this.street, this.city, [this.state, this.zip].filter(Boolean).join(' ')]
                    .filter(Boolean).join(', ') || '';
         },
-        sessions: (loc.sessions || [])
-          .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-          .map(s => ({
-            id:          s.id,
+        programs: (loc.programs || [])
+          .sort((a, b) => a.label < b.label ? -1 : 1)
+          .map(prog => ({
+            id:          prog.id,
+            campId:      prog.camp_id,
             locationId:  loc.id,
             locationName: loc.name || null,
-            s: s.start_date, e: s.end_date, lbl: s.label,
-            cost:        s.cost || null, costN: s.cost_n || 0,
-            startTime:   s.start_time || null, endTime: s.end_time || null,
-            appDeadline: s.app_deadline || null,
-            ageMin:      s.age_min ?? null, ageMax: s.age_max ?? null,
-            virtual:     s.virtual || false,
+            lbl:         prog.label,
+            cost:        prog.cost || null,  costN: prog.cost_n || 0,
+            startTime:   prog.start_time || null, endTime: prog.end_time || null,
+            appDeadline: prog.app_deadline || null,
+            ageMin:      prog.age_min ?? null, ageMax: prog.age_max ?? null,
+            virtual:     prog.virtual || false,
+            dates: (prog.session_dates || [])
+              .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
+              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date })),
           })),
       }));
       return {
@@ -2225,20 +2249,37 @@ async function loadCamps() {
         get city()   { return this.locations[0]?.city || null; },
         get state()  { return this.locations[0]?.state || null; },
         get street() { return this.locations[0]?.street || null; },
-        // Flat sessions across all locations
-        get sessions() { return this.locations.flatMap(l => l.sessions); },
-        // Derive camp-level cost summary from sessions for display and budget fallback
+        // Flat sessions across all locations (flattens programs→dates for backward compat)
+        get sessions() {
+          return this.locations.flatMap(l =>
+            (l.programs || []).flatMap(prog =>
+              prog.dates.map(d => ({
+                id: d.id,
+                s: d.s, e: d.e, lbl: prog.lbl,
+                cost: prog.cost, costN: prog.costN,
+                startTime: prog.startTime, endTime: prog.endTime,
+                appDeadline: prog.appDeadline,
+                ageMin: prog.ageMin, ageMax: prog.ageMax,
+                virtual: prog.virtual,
+                locationId: prog.locationId, locationName: prog.locationName,
+                progId: prog.id,
+              }))
+            )
+          );
+        },
+        // Derive camp-level cost summary from programs (not flat dates) to avoid inflated ranges
         get cost() {
-          const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
+          const progs = this.locations.flatMap(l => l.programs || []);
+          const nums = progs.map(p => p.costN).filter(n => n > 0);
           if (nums.length) {
             const mn = Math.min(...nums), mx = Math.max(...nums);
             const sfx = this.sleep ? '/session' : '/wk';
             return mn === mx ? `~$${mn.toLocaleString()}${sfx}` : `~$${mn.toLocaleString()}–$${mx.toLocaleString()}${sfx}`;
           }
-          return this.sessions.find(s => s.cost && s.cost !== 'See website')?.cost || 'See website';
+          return progs.find(p => p.cost && p.cost !== 'See website')?.cost || 'See website';
         },
         get costN() {
-          const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
+          const nums = this.locations.flatMap(l => l.programs || []).map(p => p.costN).filter(n => n > 0);
           return nums.length ? Math.min(...nums) : 0;
         },
         url:          row.url,
@@ -3383,7 +3424,7 @@ function wizGenRecs() {
 
   // Add a sleepaway session to a kid's consider list for all its covered weeks
   function addSleepSession(k,camp,sessId,locationId,locationName) {
-    const found=findSessById(camp,sessId);
+    const found=findDateById(camp,sessId);
     if(!found) return;
     const {sess}=found;
     const ss=pd(sess.s), se=pd(sess.e);
@@ -3402,7 +3443,7 @@ function wizGenRecs() {
   let budgetSpent = 0;
   const budgetedSess = new Set(); // sleepaway session IDs already counted (avoid double-counting multi-week spans)
   function sessCostN(c, sessId) {
-    if(sessId != null) { const found=findSessById(c,sessId); if(found?.sess?.costN) return found.sess.costN; }
+    if(sessId != null) { const found=findDateById(c,sessId); if(found?.sess?.costN) return found.sess.costN; }
     return c.costN || 0;
   }
   function projCost(c, sessId, kids) {
@@ -3473,7 +3514,7 @@ function wizGenRecs() {
           k.consider[w.mon].push({campId:pick.id,sessId:null,locationId:null,locationName:null,color:pick.color,name:pick.name});
         }
       });
-      const pickSess=pickSessId!=null?findSessById(pick,pickSessId)?.sess:null;
+      const pickSess=pickSessId!=null?findDateById(pick,pickSessId)?.sess:null;
       if(S.kids.some((_,ki)=>kidHasWeek(ki,w.mon)))
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?'All kids':null,
@@ -3519,7 +3560,7 @@ function wizGenRecs() {
           if(!k.consider[w.mon]) k.consider[w.mon]=[];
           k.consider[w.mon].push({campId:pick.id,sessId:null,locationId:null,locationName:null,color:pick.color,name:pick.name});
         }
-        const pickSess=pickSessId!=null?findSessById(pick,pickSessId)?.sess:null;
+        const pickSess=pickSessId!=null?findDateById(pick,pickSessId)?.sess:null;
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null,
           cost:fmtCost(pickSess?.cost??pick.cost,sessCostN(pick,pickSessId),pick.sleep)});
