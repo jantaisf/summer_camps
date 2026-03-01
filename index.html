@@ -495,7 +495,8 @@
           style="width:100%;height:34px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:7px;font-size:.85rem;background:white" />
       </div>
     </div>
-    <div class="modal-field">
+    <!-- Location fields: shown for custom camps -->
+    <div id="cc_location_fields" class="modal-field">
       <label>Location</label>
       <input type="text" id="cc_street" placeholder="Street address (optional)" autocomplete="off" style="margin-bottom:.35rem" />
       <div style="display:flex;gap:.5rem;margin-bottom:.35rem">
@@ -510,6 +511,12 @@
         <input type="text" id="cc_country" placeholder="Country" autocomplete="off"
           style="flex:1;padding:.45rem .65rem;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;outline:none" />
       </div>
+    </div>
+    <!-- Locations section: shown for admin camps only -->
+    <div id="cc_locations_section" style="display:none;margin-bottom:.9rem">
+      <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem">Locations</div>
+      <div id="cc_location_rows"></div>
+      <button type="button" onclick="addLocationRow()" style="margin-top:.4rem;font-size:.82rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:.15rem 0;font-weight:600">+ Add Location</button>
     </div>
     <div class="modal-field">
       <label>Description</label>
@@ -731,10 +738,12 @@ function fmtCost(cost, costN, isSleep=false) {
 }
 // Returns true only for the first week a sleepaway session appears in the planner.
 // Checks: session must have started after last Friday (i.e. didn't overlap previous week).
-function isFirstWeekOfSession(camp, sessIdx, mon) {
-  if(sessIdx == null || sessIdx < 0 || !camp?.sessions?.[sessIdx]) return true;
+function isFirstWeekOfSession(camp, sessId, mon) {
+  if(sessId == null) return true;
+  const found = findSessById(camp, sessId);
+  if(!found) return true;
   const prevFri = iso(addD(pd(mon), -3));
-  return pd(camp.sessions[sessIdx].s) > pd(prevFri);
+  return pd(found.sess.s) > pd(prevFri);
 }
 function nextMon(d) {
   const r=new Date(d), day=r.getDay();
@@ -810,10 +819,22 @@ function campAvail(camp, mon, fri) {
   if(!camp.sessions?.length) return true; // custom sleepaway with no sessions = always available
   return camp.sessions.some(s => pd(s.s)<=wf && pd(s.e)>=wm);
 }
-function getSessIdx(camp, mon, fri) {
-  if(!camp.sleep) return -1;
+// Returns {sess, loc} for the session overlapping [mon,fri], or null.
+function findSessById(camp, sessId) {
+  for (const loc of camp.locations || []) {
+    const sess = loc.sessions.find(s => s.id === sessId);
+    if (sess) return { sess, loc };
+  }
+  return null;
+}
+function getSessForWeek(camp, mon, fri) {
+  if(!camp.sleep) return null;
   const wm=pd(mon), wf=pd(fri);
-  return camp.sessions.findIndex(s => pd(s.s)<=wf && pd(s.e)>=wm);
+  for (const loc of camp.locations || []) {
+    const sess = loc.sessions.find(s => pd(s.s)<=wf && pd(s.e)>=wm);
+    if (sess) return { sess, loc };
+  }
+  return null;
 }
 function campPassesFilters(c) {
   const age = S.kids[S.activeKid].age;
@@ -824,7 +845,8 @@ function campPassesFilters(c) {
   if(S.actFilter && !ctags.includes(S.actFilter)) return false;
   if(S.appFilter==='apply' && !c.appRequired) return false;
   if(S.appFilter==='reg' && c.appRequired) return false;
-  if(S.q && !`${c.name} ${c.desc} ${c.loc} ${ctags.join(' ')}`.toLowerCase().includes(S.q.toLowerCase())) return false;
+  const locStr = (c.locations||[]).map(l=>[l.name,l.city,l.state].filter(Boolean).join(' ')).join(' ') || c.loc;
+  if(S.q && !`${c.name} ${c.desc} ${locStr} ${ctags.join(' ')}`.toLowerCase().includes(S.q.toLowerCase())) return false;
   return true;
 }
 function getFiltered() {
@@ -839,17 +861,17 @@ function getFiltered() {
 }
 
 // ── Status checks — use activeKid ─────────────────────────────────────────
-function isSessionConsidering(campId, sessIdx) {
+function isSessionConsidering(campId, sessId) {
   const k = S.kids[S.activeKid];
-  return Object.values(k.consider).some(arr => arr.some(e => e.campId===campId && e.sessIdx===sessIdx));
+  return Object.values(k.consider).some(arr => arr.some(e => e.campId===campId && e.sessId===sessId));
 }
 function isDayWeekConsidering(campId, weekMon) {
   const k = S.kids[S.activeKid];
   return (k.consider[weekMon]||[]).some(e => e.campId===campId);
 }
-function isSessionPlanned(campId, sessIdx) {
+function isSessionPlanned(campId, sessId) {
   const k = S.kids[S.activeKid];
-  return Object.values(k.planned).some(e => e.campId===campId && e.sessIdx===sessIdx);
+  return Object.values(k.planned).some(e => e.campId===campId && e.sessId===sessId);
 }
 function isDayWeekPlanned(campId, weekMon) {
   const k = S.kids[S.activeKid];
@@ -857,18 +879,20 @@ function isDayWeekPlanned(campId, weekMon) {
 }
 
 // ── Add to consideration — uses activeKid ─────────────────────────────────
-function addSessionToConsider(campId, sessIdx) {
+function addSessionToConsider(campId, sessId, locationId, locationName) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
   if(!camp||!camp.sleep) return;
-  const sess=camp.sessions[sessIdx];
+  const found=findSessById(camp, sessId);
+  if(!found) return;
+  const {sess}=found;
   const ss=pd(sess.s), se=pd(sess.e);
   WEEKS.forEach(w => {
     const wm=pd(w.mon), wf=pd(w.fri);
     if(ss<=wf && se>=wm) {
       if(!k.consider[w.mon]) k.consider[w.mon]=[];
-      if(!k.consider[w.mon].some(e=>e.campId===campId&&e.sessIdx===sessIdx))
-        k.consider[w.mon].push({campId,sessIdx,color:camp.color,name:camp.name});
+      if(!k.consider[w.mon].some(e=>e.campId===campId&&e.sessId===sessId))
+        k.consider[w.mon].push({campId,sessId,locationId,locationName,color:camp.color,name:camp.name});
     }
   });
   renderAll();
@@ -879,15 +903,15 @@ function addDayWeekToConsider(campId, weekMon) {
   if(!camp) return;
   if(!k.consider[weekMon]) k.consider[weekMon]=[];
   if(!k.consider[weekMon].some(e=>e.campId===campId))
-    k.consider[weekMon].push({campId,sessIdx:null,color:camp.color,name:camp.name});
+    k.consider[weekMon].push({campId,sessId:null,locationId:null,locationName:null,color:camp.color,name:camp.name});
   renderAll();
 }
 
 // ── Remove from consideration — uses activeKid ────────────────────────────
-function removeSessionFromConsider(campId, sessIdx) {
+function removeSessionFromConsider(campId, sessId) {
   const k = S.kids[S.activeKid];
   Object.keys(k.consider).forEach(key=>{
-    k.consider[key]=k.consider[key].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+    k.consider[key]=k.consider[key].filter(e=>!(e.campId===campId&&e.sessId===sessId));
     if(!k.consider[key].length) delete k.consider[key];
   });
   renderAll();
@@ -902,18 +926,20 @@ function removeDayWeekFromConsider(campId, weekMon) {
 }
 
 // ── Promote to planned — uses activeKid ──────────────────────────────────
-function promoteSessionToPlanned(campId, sessIdx) {
+function promoteSessionToPlanned(campId, sessId, locationId, locationName) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
   if(!camp||!camp.sleep) return;
-  const sess=camp.sessions[sessIdx];
+  const found=findSessById(camp, sessId);
+  if(!found) return;
+  const {sess}=found;
   const ss=pd(sess.s), se=pd(sess.e);
   WEEKS.forEach(w => {
     const wm=pd(w.mon), wf=pd(w.fri);
     if(ss<=wf && se>=wm) {
-      k.planned[w.mon]={campId,sessIdx,color:camp.color,name:camp.name};
+      k.planned[w.mon]={campId,sessId,locationId,locationName,color:camp.color,name:camp.name};
       if(k.consider[w.mon]) {
-        k.consider[w.mon]=k.consider[w.mon].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+        k.consider[w.mon]=k.consider[w.mon].filter(e=>!(e.campId===campId&&e.sessId===sessId));
         if(!k.consider[w.mon].length) delete k.consider[w.mon];
       }
     }
@@ -924,7 +950,7 @@ function promoteDayWeekToPlanned(campId, weekMon) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
   if(!camp) return;
-  k.planned[weekMon]={campId,sessIdx:null,color:camp.color,name:camp.name};
+  k.planned[weekMon]={campId,sessId:null,locationId:null,locationName:null,color:camp.color,name:camp.name};
   if(k.consider[weekMon]) {
     k.consider[weekMon]=k.consider[weekMon].filter(e=>e.campId!==campId);
     if(!k.consider[weekMon].length) delete k.consider[weekMon];
@@ -933,10 +959,10 @@ function promoteDayWeekToPlanned(campId, weekMon) {
 }
 
 // ── Remove from planned — uses activeKid ─────────────────────────────────
-function removeSessionFromPlanned(campId, sessIdx) {
+function removeSessionFromPlanned(campId, sessId) {
   const k = S.kids[S.activeKid];
   Object.keys(k.planned).forEach(key=>{
-    if(k.planned[key].campId===campId&&k.planned[key].sessIdx===sessIdx) delete k.planned[key];
+    if(k.planned[key].campId===campId&&k.planned[key].sessId===sessId) delete k.planned[key];
   });
   renderAll();
 }
@@ -947,25 +973,27 @@ function removeDayWeekFromPlanned(weekMon) {
 }
 
 // ── Week panel chip actions — explicit kidIdx ─────────────────────────────
-function promoteConsiderChip(weekMon, campId, sessIdx, kidIdx) {
+function promoteConsiderChip(weekMon, campId, sessId, kidIdx) {
   const k = S.kids[kidIdx];
   const camp = allCamps().find(c=>c.id===campId);
   if(!camp) return;
-  if(camp.sleep && sessIdx != null) {
-    const sess = camp.sessions[sessIdx];
+  if(camp.sleep && sessId != null) {
+    const found=findSessById(camp, sessId);
+    if(!found) return;
+    const {sess,loc}=found;
     const ss=pd(sess.s), se=pd(sess.e);
     WEEKS.forEach(w => {
       const wm=pd(w.mon), wf=pd(w.fri);
       if(ss<=wf && se>=wm) {
-        k.planned[w.mon]={campId,sessIdx,color:camp.color,name:camp.name};
+        k.planned[w.mon]={campId,sessId,locationId:loc.id,locationName:loc.name,color:camp.color,name:camp.name};
         if(k.consider[w.mon]) {
-          k.consider[w.mon]=k.consider[w.mon].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+          k.consider[w.mon]=k.consider[w.mon].filter(e=>!(e.campId===campId&&e.sessId===sessId));
           if(!k.consider[w.mon].length) delete k.consider[w.mon];
         }
       }
     });
   } else {
-    k.planned[weekMon]={campId,sessIdx:null,color:camp.color,name:camp.name};
+    k.planned[weekMon]={campId,sessId:null,locationId:null,locationName:null,color:camp.color,name:camp.name};
     if(k.consider[weekMon]) {
       k.consider[weekMon]=k.consider[weekMon].filter(e=>e.campId!==campId);
       if(!k.consider[weekMon].length) delete k.consider[weekMon];
@@ -973,13 +1001,13 @@ function promoteConsiderChip(weekMon, campId, sessIdx, kidIdx) {
   }
   renderAll();
 }
-function removeConsiderChip(weekMon, campId, sessIdx, kidIdx) {
+function removeConsiderChip(weekMon, campId, sessId, kidIdx) {
   const k = S.kids[kidIdx];
   const camp = allCamps().find(c=>c.id===campId);
   if(!camp) return;
-  if(camp.sleep && sessIdx != null) {
+  if(camp.sleep && sessId != null) {
     Object.keys(k.consider).forEach(key=>{
-      k.consider[key]=k.consider[key].filter(e=>!(e.campId===campId&&e.sessIdx===sessIdx));
+      k.consider[key]=k.consider[key].filter(e=>!(e.campId===campId&&e.sessId===sessId));
       if(!k.consider[key].length) delete k.consider[key];
     });
   } else {
@@ -995,9 +1023,9 @@ function removePlannedChip(weekMon, kidIdx) {
   const e = k.planned[weekMon];
   if(!e) return;
   const camp = allCamps().find(c=>c.id===e.campId);
-  if(camp && camp.sleep && e.sessIdx != null) {
+  if(camp && camp.sleep && e.sessId != null) {
     Object.keys(k.planned).forEach(key=>{
-      if(k.planned[key].campId===e.campId&&k.planned[key].sessIdx===e.sessIdx) delete k.planned[key];
+      if(k.planned[key].campId===e.campId&&k.planned[key].sessId===e.sessId) delete k.planned[key];
     });
   } else {
     delete k.planned[weekMon];
@@ -1006,7 +1034,7 @@ function removePlannedChip(weekMon, kidIdx) {
 }
 
 // ── Week-select flow — adds to activeKid's consideration ──────────────────
-function addToPlan(campId, sessIdx) {
+function addToPlan(campId, sessId) {
   if(!S.selWeek) return;
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
@@ -1014,16 +1042,18 @@ function addToPlan(campId, sessIdx) {
   if(!camp.sleep) {
     if(!k.consider[S.selWeek]) k.consider[S.selWeek]=[];
     if(!k.consider[S.selWeek].some(e=>e.campId===campId))
-      k.consider[S.selWeek].push({campId,sessIdx:null,color:camp.color,name:camp.name});
+      k.consider[S.selWeek].push({campId,sessId:null,locationId:null,locationName:null,color:camp.color,name:camp.name});
   } else {
-    const sess=camp.sessions[sessIdx];
+    const found=sessId!=null?findSessById(camp,sessId):null;
+    if(!found) return;
+    const {sess,loc}=found;
     const ss=pd(sess.s), se=pd(sess.e);
     WEEKS.forEach(w => {
       const wm=pd(w.mon), wf=pd(w.fri);
       if(ss<=wf && se>=wm) {
         if(!k.consider[w.mon]) k.consider[w.mon]=[];
-        if(!k.consider[w.mon].some(e=>e.campId===campId&&e.sessIdx===sessIdx))
-          k.consider[w.mon].push({campId,sessIdx,color:camp.color,name:camp.name});
+        if(!k.consider[w.mon].some(e=>e.campId===campId&&e.sessId===sessId))
+          k.consider[w.mon].push({campId,sessId,locationId:loc.id,locationName:loc.name,color:camp.color,name:camp.name});
       }
     });
   }
@@ -1058,8 +1088,8 @@ function renderSummary() {
     const openCount = total - plannedCount - considerCount;
     const seen = new Set(); let cost = 0;
     Object.values(k.planned).forEach(e => {
-      const key=`${e.campId}-${e.sessIdx}`;
-      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c){ const s=e.sessIdx!=null&&e.sessIdx>=0?c.sessions?.[e.sessIdx]:null; cost+=(s?.costN??c.costN)||0; } }
+      const key=`${e.campId}-${e.sessId}`;
+      if(!seen.has(key)){ seen.add(key); const c=allCamps().find(x=>x.id===e.campId); if(c){ const found=e.sessId!=null?findSessById(c,e.sessId):null; cost+=(found?.sess?.costN??c.costN)||0; } }
     });
     if(plannedCount>0||considerCount>0) hasAny=true;
     return `<div class="sum-kid-row">
@@ -1101,15 +1131,15 @@ function renderWeeks() {
         let chips = [];
         considers.forEach(e => {
           const cc = allCamps().find(c=>c.id===e.campId);
-          const showCost = cc && isFirstWeekOfSession(cc, e.sessIdx, w.mon);
-          const cSess = e.sessIdx != null && e.sessIdx >= 0 ? cc?.sessions?.[e.sessIdx] : null;
+          const showCost = cc && isFirstWeekOfSession(cc, e.sessId, w.mon);
+          const cSess = e.sessId != null ? findSessById(cc, e.sessId)?.sess : null;
           const ccost = showCost ? fmtCost(cSess?.cost ?? cc.cost, cSess?.costN ?? cc.costN, cc.sleep) : null;
-          chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessIdx},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
+          chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessId},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessId},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
         });
         if(p) {
           const pc = allCamps().find(c=>c.id===p.campId);
-          const showCost = pc && isFirstWeekOfSession(pc, p.sessIdx, w.mon);
-          const pSess = p.sessIdx != null && p.sessIdx >= 0 ? pc?.sessions?.[p.sessIdx] : null;
+          const showCost = pc && isFirstWeekOfSession(pc, p.sessId, w.mon);
+          const pSess = p.sessId != null ? findSessById(pc, p.sessId)?.sess : null;
           const pcost = showCost ? fmtCost(pSess?.cost ?? pc.cost, pSess?.costN ?? pc.costN, pc.sleep) : null;
           chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
         }
@@ -1223,12 +1253,12 @@ function renderCamps() {
   grid.innerHTML = backBtn + filtered.map(camp => {
     const fri = S.selWeek ? iso(addD(pd(S.selWeek),4)) : null;
     const isExp = S.expandCard===camp.id;
-    let sessInfo='', sessIdx=null;
+    let sessInfo='', sessForWeek=null;
     if(S.selWeek&&camp.sleep){
-      sessIdx=getSessIdx(camp,S.selWeek,fri);
-      if(sessIdx>=0){
-        const s=camp.sessions[sessIdx];
-        sessInfo=`<div class="session-pill">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} &nbsp;·&nbsp; ${s.lbl}</div>`;
+      sessForWeek=getSessForWeek(camp,S.selWeek,fri);
+      if(sessForWeek){
+        const {sess:s,loc}=sessForWeek;
+        sessInfo=`<div class="session-pill">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} &nbsp;·&nbsp; ${s.lbl}${loc.name?' · '+loc.name:''}</div>`;
       }
     }
     const verifiedBadge = camp.custom ? '' : (
@@ -1241,7 +1271,7 @@ function renderCamps() {
     if(S.selWeek){
       const avail=campAvail(camp,S.selWeek,fri);
       btn=avail
-        ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessIdx})">+ Consider</button>`
+        ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessForWeek?.sess?.id??null})">+ Consider</button>`
         :`<button class="btn btn-solid" disabled onclick="event.stopPropagation()">Not available</button>`;
     } else {
       const websiteLink = camp.websiteUrl ? `<a class="btn btn-outline" href="${camp.websiteUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website →</a>` : '';
@@ -1251,19 +1281,23 @@ function renderCamps() {
         : `<span></span>`;
     }
     let sessionsSection='';
-    if(camp.sleep&&camp.sessions?.length) {
+    const _hasSleepSessions = camp.sleep && camp.locations?.some(l=>l.sessions.length);
+    if(_hasSleepSessions) {
+      const _multiLoc = camp.locations.filter(l=>l.sessions.length).length > 1 || camp.locations.some(l=>l.name);
       sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div><ul class="sessions-list">${
-        camp.sessions.map((s,i)=>{
-          const considering=isSessionConsidering(camp.id,i);
-          const planned=isSessionPlanned(camp.id,i);
-          const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
-          const deadlineStr = s.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(s.appDeadline))}</span>` : '';
-          const locOverride = sessLocStr(s);
-          const locStr = locOverride ? `<span class="sess-loc">📍 ${locOverride}</span>` : '';
-          const label=`📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}${timeStr}`;
-          if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${i})"><span class="sess-label">${label}${locStr}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-          if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${i})"><span class="sess-label">${label}${locStr}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${i})">✕</button></span></li>`;
-          return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${i})"><span class="sess-label">${label}${locStr}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
+        camp.locations.flatMap(loc=>{
+          if(!loc.sessions.length) return [];
+          const locHeader = (_multiLoc && loc.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${loc.name}${loc.loc?' · <span style="font-weight:400">'+loc.loc+'</span>':''}</li>`] : [];
+          return [...locHeader, ...loc.sessions.map(s=>{
+            const considering=isSessionConsidering(camp.id,s.id);
+            const planned=isSessionPlanned(camp.id,s.id);
+            const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
+            const deadlineStr = s.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(s.appDeadline))}</span>` : '';
+            const label=`📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}${timeStr}`;
+            if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${s.id})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
+            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${s.id},${loc.id},${JSON.stringify(loc.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${s.id})">✕</button></span></li>`;
+            return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${s.id},${loc.id},${JSON.stringify(loc.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
+          })];
         }).join('')
       }</ul></div>`;
     } else {
@@ -1346,7 +1380,7 @@ function renderCamps() {
         ${verifiedBadge}
         <div class="card-meta">
           <span class="mk">Ages</span><span class="mv">${camp.ageMin}–${camp.ageMax}</span>
-          <span class="mk">Location</span><span class="mv">${[camp.city, camp.state].filter(Boolean).join(', ') || camp.loc || '—'}</span>
+          <span class="mk">Location</span><span class="mv">${camp.locations?.length>1 ? camp.locations.map(l=>l.name||l.city).filter(Boolean).join(', ') : [camp.city, camp.state].filter(Boolean).join(', ') || camp.loc || '—'}</span>
           ${isExp && camp.street ? `<span class="mk">Address</span><span class="mv">${camp.loc}</span>` : ''}
           ${camp.custom ? '' : `<span class="mk">Apply/info</span><span class="mv">${camp.apply}</span>`}
         </div>
@@ -1416,6 +1450,74 @@ let _editingCampId = null;
 let _campStyle = 'day';
 let _adminCampMode = false;
 let _campTags = [];
+let _campLocations = []; // [{id, name, street, city, state, zip, url, _delete}]
+
+function renderLocationRows() {
+  const el = document.getElementById('cc_location_rows');
+  if(!el) return;
+  el.innerHTML = _campLocations.filter(l=>!l._delete).map((loc,i)=>`
+    <div style="border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;background:#fafbfc">
+      <div style="display:flex;gap:.5rem;margin-bottom:.35rem;align-items:center">
+        <input type="text" placeholder="Location name (optional, e.g. Bay Club Gateway)"
+          value="${loc.name||''}" oninput="_campLocations[${i}].name=this.value"
+          style="flex:1;padding:.38rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-size:.82rem;outline:none" />
+        <button type="button" onclick="removeLocationRow(${i})"
+          style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:.9rem;line-height:1;padding:.2rem .35rem" title="Remove location">✕</button>
+      </div>
+      <input type="text" placeholder="Street address" value="${loc.street||''}"
+        oninput="_campLocations[${i}].street=this.value"
+        style="width:100%;padding:.38rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-size:.82rem;outline:none;margin-bottom:.35rem;box-sizing:border-box" />
+      <div style="display:flex;gap:.4rem;margin-bottom:.35rem">
+        <input type="text" placeholder="City" value="${loc.city||''}"
+          oninput="_campLocations[${i}].city=this.value"
+          style="flex:2;padding:.38rem .55rem;border:1.5px solid var(--border);border-radius:7px;font-size:.82rem;outline:none" />
+        <input type="text" placeholder="ST" value="${loc.state||''}"
+          oninput="_campLocations[${i}].state=this.value"
+          style="width:52px;padding:.38rem .5rem;border:1.5px solid var(--border);border-radius:7px;font-size:.82rem;outline:none" />
+        <input type="text" placeholder="ZIP" value="${loc.zip||''}"
+          oninput="_campLocations[${i}].zip=this.value"
+          style="width:72px;padding:.38rem .5rem;border:1.5px solid var(--border);border-radius:7px;font-size:.82rem;outline:none" />
+      </div>
+      <input type="url" placeholder="Location-specific URL (optional)" value="${loc.url||''}"
+        oninput="_campLocations[${i}].url=this.value"
+        style="width:100%;padding:.38rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-size:.82rem;outline:none;box-sizing:border-box" />
+    </div>`).join('');
+}
+
+function addLocationRow() {
+  _campLocations.push({id:null,name:'',street:'',city:'',state:'',zip:'',url:'',_delete:false});
+  renderLocationRows();
+}
+
+function removeLocationRow(i) {
+  if(_campLocations[i].id) {
+    _campLocations[i]._delete = true;
+  } else {
+    _campLocations.splice(i,1);
+  }
+  renderLocationRows();
+}
+
+async function saveLocations(campId) {
+  for(const loc of _campLocations) {
+    if(loc._delete && loc.id) {
+      await sb.from('locations').delete().eq('id', loc.id);
+    } else if(!loc._delete && loc.id) {
+      await sb.from('locations').update({
+        name: loc.name||null, street_address: loc.street||null,
+        city: loc.city||null, state: loc.state||null,
+        zip: loc.zip||null, url: loc.url||null,
+      }).eq('id', loc.id);
+    } else if(!loc._delete && !loc.id) {
+      await sb.from('locations').insert({
+        camp_id: campId, name: loc.name||null,
+        street_address: loc.street||null, city: loc.city||null,
+        state: loc.state||null, zip: loc.zip||null,
+        url: loc.url||null, active: true,
+      });
+    }
+  }
+}
 
 function renderCampTags() {
   const wrap = document.getElementById('cc_tags_wrap');
@@ -1461,6 +1563,10 @@ function openAddCampModal(editId) {
   document.getElementById('addCampModalTitle').textContent = isEdit ? `Edit Camp${adminLabel}` : (_adminCampMode ? 'Add Camp' : 'Add Custom Camp');
   document.getElementById('cc_submit').textContent = isEdit ? 'Save Changes' : (_adminCampMode ? 'Save to Database' : 'Add Camp');
   document.getElementById('cc_msg').textContent = '';
+  // Show/hide location sections based on admin mode
+  document.getElementById('cc_location_fields').style.display = _adminCampMode ? 'none' : '';
+  document.getElementById('cc_locations_section').style.display = _adminCampMode ? '' : 'none';
+
   if(isEdit) {
     const c = _adminCampMode ? CAMPS.find(x=>x.id===editId) : S.customCamps.find(x=>x.id===editId);
     if(!c) return;
@@ -1482,6 +1588,14 @@ function openAddCampModal(editId) {
     document.getElementById('cc_date_start').value = c.range?.s || '';
     document.getElementById('cc_date_end').value = c.range?.e || '';
     setCampStyle(c.sleep ? 'sleep' : 'day');
+    if(_adminCampMode) {
+      _campLocations = (c.locations || []).map(l => ({
+        id: l.id, name: l.name||'', street: l.street||'',
+        city: l.city||'', state: l.state||'', zip: l.zip||'',
+        url: l.url||'', _delete: false,
+      }));
+      renderLocationRows();
+    }
   } else {
     document.getElementById('cc_name').value = '';
     document.getElementById('cc_website_url').value = '';
@@ -1500,6 +1614,10 @@ function openAddCampModal(editId) {
     document.getElementById('cc_date_start').value = '';
     document.getElementById('cc_date_end').value = '';
     setCampStyle('day');
+    if(_adminCampMode) {
+      _campLocations = [{id:null,name:'',street:'',city:'',state:'',zip:'',url:'',_delete:false}];
+      renderLocationRows();
+    }
   }
   toggleCampDateRange();
   document.getElementById('addCampModal').style.display = 'flex';
@@ -1534,6 +1652,22 @@ function submitCustomCamp() {
   const existingColor = isEdit
     ? (_adminCampMode ? CAMPS.find(c=>c.id===_editingCampId)?.color : S.customCamps.find(c=>c.id===_editingCampId)?.color)
     : null;
+  const _street  = document.getElementById('cc_street').value.trim() || null;
+  const _city    = document.getElementById('cc_city').value.trim() || null;
+  const _state   = document.getElementById('cc_state').value.trim() || null;
+  const _zip     = document.getElementById('cc_zip').value.trim() || null;
+  const _country = document.getElementById('cc_country').value.trim() || null;
+  const _url     = document.getElementById('cc_url').value.trim();
+  // Build synthetic location for custom camps (single location, no sessions)
+  const _customLoc = {
+    id: null, campId: null, name: null,
+    street: _street, city: _city, state: _state, zip: _zip, country: _country, url: _url,
+    get loc() {
+      return [this.street, this.city, [this.state, this.zip].filter(Boolean).join(' ')]
+               .filter(Boolean).join(', ') || '';
+    },
+    sessions: [],
+  };
   const camp = {
     id: isEdit ? _editingCampId : (_adminCampMode ? null : -Date.now()),
     name,
@@ -1545,18 +1679,17 @@ function submitCustomCamp() {
     ageMin: parseInt(document.getElementById('cc_age_min').value) || 4,
     ageMax: parseInt(document.getElementById('cc_age_max').value) || 17,
     range,
-    apply: '', cost: document.getElementById('cc_cost').value.trim() || 'See website', costN: 0,
-    street: document.getElementById('cc_street').value.trim() || null,
-    city:   document.getElementById('cc_city').value.trim() || null,
-    state:  document.getElementById('cc_state').value.trim() || null,
-    zip:    document.getElementById('cc_zip').value.trim() || null,
-    country: document.getElementById('cc_country').value.trim() || null,
-    get loc() {
-      return [this.street, this.city, [this.state, this.zip].filter(Boolean).join(' ')]
-               .filter(Boolean).join(', ') || '';
-    },
+    apply: '',
+    locations: [_customLoc],
+    // Backward-compat direct fields (read-through to location)
+    get street() { return this.locations[0]?.street || null; },
+    get city()   { return this.locations[0]?.city || null; },
+    get state()  { return this.locations[0]?.state || null; },
+    get loc()    { return this.locations[0]?.loc || ''; },
+    get sessions() { return []; },
+    cost: document.getElementById('cc_cost').value.trim() || 'See website', costN: 0,
     websiteUrl: document.getElementById('cc_website_url').value.trim() || null,
-    url: document.getElementById('cc_url').value.trim(),
+    url: _url,
     color: existingColor || CUSTOM_COLORS[S.customCamps.length % CUSTOM_COLORS.length],
     custom: !_adminCampMode
   };
@@ -1642,24 +1775,22 @@ async function saveAdminCamp(camp) {
     app_required: camp.appRequired || false,
     description: camp.desc || null,
     age_min: camp.ageMin, age_max: camp.ageMax,
-    sessions: camp.sessions || [],
     apply_info: camp.apply || null,
-    street_address: camp.street || null,
-    city: camp.city || null, state: camp.state || null,
-    zip: camp.zip || null, country: camp.country || null,
     website_url: camp.websiteUrl || null,
     url: camp.url || null,
     color: camp.color || '#0369a1',
     date_range: camp.range || null,
     active: true,
   };
-  const { error } = await sb.from('camps').upsert(row, { onConflict: 'id' });
+  const { data: savedRow, error } = await sb.from('camps').upsert(row, { onConflict: 'id' }).select('id').single();
   if(error) {
     document.getElementById('cc_msg').textContent = 'Save failed: ' + error.message;
     btn.disabled = false;
     btn.textContent = 'Save to Database';
     return;
   }
+  const campId = savedRow?.id || camp.id;
+  if(campId) await saveLocations(campId);
   closeAddCampModal();
   await loadCamps();
   openAdminCampsModal();
@@ -1716,40 +1847,49 @@ function renderMap(filtered) {
   const missing = [];
   const fri = S.selWeek ? iso(addD(pd(S.selWeek),4)) : null;
 
+  const shownCamps = new Set();
   filtered.forEach(camp => {
-    const c = camp.custom ? null : COORDS[camp.id];
-    if(!c) { if(camp.custom) missing.push(camp.name); return; }
+    const locs = camp.locations?.length ? camp.locations : [null];
+    locs.forEach(loc => {
+      const c = camp.custom ? null : COORDS[camp.id];
+      if(!c) {
+        if(!shownCamps.has(camp.id)) { if(camp.custom) missing.push(camp.name); shownCamps.add(camp.id); }
+        return;
+      }
 
-    const marker = L.circleMarker(c, {
-      radius: 9, fillColor: camp.color, color: '#fff',
-      weight: 2, opacity: 1, fillOpacity: .88
+      const marker = L.circleMarker(c, {
+        radius: 9, fillColor: camp.color, color: '#fff',
+        weight: 2, opacity: 1, fillOpacity: .88
+      });
+
+      const avail = S.selWeek ? campAvail(camp, S.selWeek, fri) : true;
+      const sf = S.selWeek && camp.sleep ? getSessForWeek(camp, S.selWeek, fri) : null;
+      const variesNote = VARIES_LOCATION.has(camp.id)
+        ? `<div style="font-size:.68rem;color:#f59e0b;margin-bottom:5px">⚠ Location varies by year — pin is approximate</div>` : '';
+      const actionBtn = S.selWeek
+        ? (avail
+            ? `<button onclick="addToPlan(${camp.id},${sf?.sess?.id??null})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Consider for ${S.kids[S.activeKid].name}</button>`
+            : `<div style="margin-top:6px;font-size:.72rem;color:#94a3b8">Not available this week</div>`)
+        : `<div style="display:flex;gap:.5rem;margin-top:7px">
+            ${camp.websiteUrl ? `<a href="${camp.websiteUrl}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Website →</a>` : ''}
+            ${(loc?.url||camp.url) ? `<a href="${loc?.url||camp.url}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Camp Info →</a>` : ''}
+           </div>`;
+
+      const displayName = loc?.name ? `${camp.name} — ${loc.name}` : camp.name;
+      const displayLoc = loc?.loc || camp.loc || '';
+      marker.bindPopup(`<div style="min-width:185px">
+        <div style="height:3px;background:${camp.color};margin:-2px -12px 8px;border-radius:2px 2px 0 0"></div>
+        <div style="font-size:.84rem;font-weight:700;line-height:1.3;margin-bottom:3px">${displayName}</div>
+        <div style="font-size:.71rem;color:#64748b;margin-bottom:2px">${camp.sleep?'Sleepaway':'Day'} · ${(camp.tags||[camp.type]).join(', ')}</div>
+        <div style="font-size:.71rem;color:#64748b;margin-bottom:5px">Ages ${camp.ageMin}–${camp.ageMax} · ${camp.cost}</div>
+        ${displayLoc ? `<div style="font-size:.68rem;color:#94a3b8;margin-bottom:4px">${displayLoc}</div>` : ''}
+        ${variesNote}${actionBtn}
+      </div>`, { maxWidth: 240 });
+
+      marker.addTo(_map);
+      _mapMarkers.push(marker);
+      pts.push(c);
     });
-
-    const avail = S.selWeek ? campAvail(camp, S.selWeek, fri) : true;
-    const sIdx = S.selWeek && camp.sleep ? getSessIdx(camp, S.selWeek, fri) : -1;
-    const variesNote = VARIES_LOCATION.has(camp.id)
-      ? `<div style="font-size:.68rem;color:#f59e0b;margin-bottom:5px">⚠ Location varies by year — pin is approximate</div>` : '';
-    const actionBtn = S.selWeek
-      ? (avail
-          ? `<button onclick="addToPlan(${camp.id},${sIdx})" style="margin-top:7px;width:100%;padding:.3rem .65rem;background:var(--primary);color:white;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer">+ Consider for ${S.kids[S.activeKid].name}</button>`
-          : `<div style="margin-top:6px;font-size:.72rem;color:#94a3b8">Not available this week</div>`)
-      : `<div style="display:flex;gap:.5rem;margin-top:7px">
-          ${camp.websiteUrl ? `<a href="${camp.websiteUrl}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Website →</a>` : ''}
-          ${camp.url ? `<a href="${camp.url}" target="_blank" style="font-size:.75rem;font-weight:700;color:var(--primary);text-decoration:none">Camp Info →</a>` : ''}
-         </div>`;
-
-    marker.bindPopup(`<div style="min-width:185px">
-      <div style="height:3px;background:${camp.color};margin:-2px -12px 8px;border-radius:2px 2px 0 0"></div>
-      <div style="font-size:.84rem;font-weight:700;line-height:1.3;margin-bottom:3px">${camp.name}</div>
-      <div style="font-size:.71rem;color:#64748b;margin-bottom:2px">${camp.sleep?'Sleepaway':'Day'} · ${(camp.tags||[camp.type]).join(', ')}</div>
-      <div style="font-size:.71rem;color:#64748b;margin-bottom:5px">Ages ${camp.ageMin}–${camp.ageMax} · ${camp.cost}</div>
-      ${camp.loc ? `<div style="font-size:.68rem;color:#94a3b8;margin-bottom:4px">${camp.loc}</div>` : ''}
-      ${variesNote}${actionBtn}
-    </div>`, { maxWidth: 240 });
-
-    marker.addTo(_map);
-    _mapMarkers.push(marker);
-    pts.push(c);
   });
 
   if(pts.length === 1) _map.setView(pts[0], 13);
@@ -1886,62 +2026,81 @@ loadCamps(); // public table — no auth required
 
 async function loadCamps() {
   const { data } = await sb.from('camps')
-    .select('*, sessions(*)')
+    .select('*, locations(*, sessions(*))')
     .eq('active', true).order('name');
   if (data) {
-    CAMPS = data.map(row => ({
-      id:           row.id,
-      name:         row.name,
-      type:         row.type,
-      tags:         (row.type || '').split(',').map(t => t.trim()).filter(Boolean),
-      sleep:        row.sleep,
-      verified:     row.review_status === 'verified',
-      reviewStatus: row.review_status,
-      scrapedAt:    row.scraped_at,
-      verifiedAt:   row.verified_at,
-      taxId:        row.tax_id,
-      appRequired:  row.app_required,
-      desc:         row.description,
-      ageMin:       row.age_min,
-      ageMax:       row.age_max,
-      // Normalize sessions from the joined table, including per-session cost
-      sessions:     (row.sessions || [])
-        .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-        .map(s => ({ id: s.id, s: s.start_date, e: s.end_date, lbl: s.label,
-                     cost: s.cost || null, costN: s.cost_n || 0,
-                     startTime: s.start_time || null, endTime: s.end_time || null,
-                     appDeadline: s.app_deadline || null,
-                     street: s.street_address || null, city: s.city || null,
-                     state: s.state || null, country: s.country || null, zip: s.zip || null })),
-      apply:        row.apply_info,
-      street:       row.street_address || null,
-      city:         row.city || null,
-      state:        row.state || null,
-      country:      row.country || null,
-      zip:          row.zip || null,
-      // Derive a display loc string from structured fields (fallback to legacy location column)
-      loc: [row.street_address, row.city, [row.state, row.zip].filter(Boolean).join(' ')]
-             .filter(Boolean).join(', ') || row.location || '',
-      // Derive camp-level cost summary from sessions for display and budget fallback
-      get cost() {
-        const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
-        if (nums.length) {
-          const mn = Math.min(...nums), mx = Math.max(...nums);
-          const sfx = this.sleep ? '/session' : '/wk';
-          return mn === mx ? `~$${mn.toLocaleString()}${sfx}` : `~$${mn.toLocaleString()}–$${mx.toLocaleString()}${sfx}`;
-        }
-        return this.sessions.find(s => s.cost && s.cost !== 'See website')?.cost || 'See website';
-      },
-      get costN() {
-        const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
-        return nums.length ? Math.min(...nums) : 0;
-      },
-      url:          row.url,
-      websiteUrl:   row.website_url || null,
-      color:        row.color,
-      range:        row.date_range || null,
-      comingSoon:   row.coming_soon || false,
-    }));
+    CAMPS = data.map(row => {
+      const locations = (row.locations || []).map(loc => ({
+        id:      loc.id,
+        campId:  loc.camp_id,
+        name:    loc.name || null,
+        street:  loc.street_address || null,
+        city:    loc.city || null,
+        state:   loc.state || null,
+        zip:     loc.zip || null,
+        country: loc.country || null,
+        url:     loc.url || null,
+        get loc() {
+          return [this.street, this.city, [this.state, this.zip].filter(Boolean).join(' ')]
+                   .filter(Boolean).join(', ') || '';
+        },
+        sessions: (loc.sessions || [])
+          .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
+          .map(s => ({
+            id:          s.id,
+            locationId:  loc.id,
+            locationName: loc.name || null,
+            s: s.start_date, e: s.end_date, lbl: s.label,
+            cost:        s.cost || null, costN: s.cost_n || 0,
+            startTime:   s.start_time || null, endTime: s.end_time || null,
+            appDeadline: s.app_deadline || null,
+          })),
+      }));
+      return {
+        id:           row.id,
+        name:         row.name,
+        type:         row.type,
+        tags:         (row.type || '').split(',').map(t => t.trim()).filter(Boolean),
+        sleep:        row.sleep,
+        verified:     row.review_status === 'verified',
+        reviewStatus: row.review_status,
+        scrapedAt:    row.scraped_at,
+        verifiedAt:   row.verified_at,
+        taxId:        row.tax_id,
+        appRequired:  row.app_required,
+        desc:         row.description,
+        ageMin:       row.age_min,
+        ageMax:       row.age_max,
+        apply:        row.apply_info,
+        locations,
+        // Backward-compat getters (single-location camps)
+        get loc()    { return this.locations[0]?.loc || ''; },
+        get city()   { return this.locations[0]?.city || null; },
+        get state()  { return this.locations[0]?.state || null; },
+        get street() { return this.locations[0]?.street || null; },
+        // Flat sessions across all locations
+        get sessions() { return this.locations.flatMap(l => l.sessions); },
+        // Derive camp-level cost summary from sessions for display and budget fallback
+        get cost() {
+          const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
+          if (nums.length) {
+            const mn = Math.min(...nums), mx = Math.max(...nums);
+            const sfx = this.sleep ? '/session' : '/wk';
+            return mn === mx ? `~$${mn.toLocaleString()}${sfx}` : `~$${mn.toLocaleString()}–$${mx.toLocaleString()}${sfx}`;
+          }
+          return this.sessions.find(s => s.cost && s.cost !== 'See website')?.cost || 'See website';
+        },
+        get costN() {
+          const nums = this.sessions.map(s => s.costN).filter(n => n > 0);
+          return nums.length ? Math.min(...nums) : 0;
+        },
+        url:          row.url,
+        websiteUrl:   row.website_url || null,
+        color:        row.color,
+        range:        row.date_range || null,
+        comingSoon:   row.coming_soon || false,
+      };
+    });
   }
   _campsLoaded = true;
   populateActFilter();
@@ -3076,15 +3235,17 @@ function wizGenRecs() {
   }
 
   // Add a sleepaway session to a kid's consider list for all its covered weeks
-  function addSleepSession(k,camp,sIdx) {
-    const sess=camp.sessions[sIdx];
+  function addSleepSession(k,camp,sessId,locationId,locationName) {
+    const found=findSessById(camp,sessId);
+    if(!found) return;
+    const {sess}=found;
     const ss=pd(sess.s), se=pd(sess.e);
     WEEKS.forEach(w=>{
       const wm=pd(w.mon), wf=pd(w.fri);
       if(ss<=wf && se>=wm) {
         if(!k.consider[w.mon]) k.consider[w.mon]=[];
-        if(!k.consider[w.mon].some(e=>e.campId===camp.id&&e.sessIdx===sIdx))
-          k.consider[w.mon].push({campId:camp.id,sessIdx:sIdx,color:camp.color,name:camp.name});
+        if(!k.consider[w.mon].some(e=>e.campId===camp.id&&e.sessId===sessId))
+          k.consider[w.mon].push({campId:camp.id,sessId,locationId,locationName,color:camp.color,name:camp.name});
       }
     });
   }
@@ -3092,23 +3253,22 @@ function wizGenRecs() {
   // Budget tracking — shared across all kids so the cap is a true family total
   const cap = WIZ.totalBudget > 0 ? WIZ.totalBudget : null; // null = no limit
   let budgetSpent = 0;
-  const budgetedSess = new Set(); // sleepaway sessions already counted (avoid double-counting multi-week spans)
-  function sessCostN(c, si) {
-    if(si >= 0 && c.sessions?.[si]?.costN) return c.sessions[si].costN;
+  const budgetedSess = new Set(); // sleepaway session IDs already counted (avoid double-counting multi-week spans)
+  function sessCostN(c, sessId) {
+    if(sessId != null) { const found=findSessById(c,sessId); if(found?.sess?.costN) return found.sess.costN; }
     return c.costN || 0;
   }
-  function projCost(c, si, kids) {
-    const n = sessCostN(c, si);
+  function projCost(c, sessId, kids) {
+    const n = sessCostN(c, sessId);
     if(!n) return 0;
-    if(c.sleep && si>=0) return budgetedSess.has(`${c.id}-${si}`) ? 0 : n*kids;
+    if(c.sleep && sessId!=null) return budgetedSess.has(sessId) ? 0 : n*kids;
     return n*kids;
   }
-  function recordCost(c, si, kids) {
-    const n = sessCostN(c, si);
+  function recordCost(c, sessId, kids) {
+    const n = sessCostN(c, sessId);
     if(!n) return;
-    if(c.sleep && si>=0) {
-      const key=`${c.id}-${si}`;
-      if(!budgetedSess.has(key)){budgetedSess.add(key);budgetSpent+=n*kids;}
+    if(c.sleep && sessId!=null) {
+      if(!budgetedSess.has(sessId)){budgetedSess.add(sessId);budgetSpent+=n*kids;}
     } else { budgetSpent+=n*kids; }
   }
 
@@ -3139,36 +3299,38 @@ function wizGenRecs() {
         return;
       }
       if(S.kids.every(k=>k.consider[w.mon]?.length||k.planned[w.mon])) return;
-      let pick=null, pickSIdx=-1;
+      let pick=null, pickSessId=null, pickLoc=null;
       for(let a=0;a<scored.length;a++){
         const {c}=scored[(ri+a)%scored.length];
         if(!campAvail(c,w.mon,fri)) continue;
-        let si=-1;
+        let sessId=null, loc=null;
         if(c.sleep){
-          si=getSessIdx(c,w.mon,fri);
-          if(si<0||usedSess.has(`${c.id}-${si}`)) continue;
+          const sf=getSessForWeek(c,w.mon,fri);
+          if(!sf||usedSess.has(sf.sess.id)) continue;
+          sessId=sf.sess.id; loc=sf.loc;
         }
-        if(cap!==null && budgetSpent+projCost(c,si,n)>cap) continue; // over budget
-        if(c.sleep){usedSess.add(`${c.id}-${si}`);pickSIdx=si;}
+        if(cap!==null && budgetSpent+projCost(c,sessId,n)>cap) continue; // over budget
+        if(c.sleep){usedSess.add(sessId);pickSessId=sessId;pickLoc=loc;}
         pick=c;
         ri=(ri+a+1)%scored.length;
         break;
       }
       if(!pick) return;
-      recordCost(pick,pickSIdx,n);
+      recordCost(pick,pickSessId,n);
       S.kids.forEach((k,ki)=>{
         if(!kidHasWeek(ki,w.mon)) return;
         if(k.consider[w.mon]?.length||k.planned[w.mon]) return;
-        if(pick.sleep&&pickSIdx>=0) addSleepSession(k,pick,pickSIdx);
+        if(pick.sleep&&pickSessId!=null) addSleepSession(k,pick,pickSessId,pickLoc?.id,pickLoc?.name);
         else {
           if(!k.consider[w.mon]) k.consider[w.mon]=[];
-          k.consider[w.mon].push({campId:pick.id,sessIdx:null,color:pick.color,name:pick.name});
+          k.consider[w.mon].push({campId:pick.id,sessId:null,locationId:null,locationName:null,color:pick.color,name:pick.name});
         }
       });
+      const pickSess=pickSessId!=null?findSessById(pick,pickSessId)?.sess:null;
       if(S.kids.some((_,ki)=>kidHasWeek(ki,w.mon)))
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?'All kids':null,
-          cost:fmtCost(pick.sessions?.[pickSIdx]?.cost??pick.cost,sessCostN(pick,pickSIdx),pick.sleep)});
+          cost:fmtCost(pickSess?.cost??pick.cost,sessCostN(pick,pickSessId),pick.sleep)});
     });
 
   } else {
@@ -3187,31 +3349,33 @@ function wizGenRecs() {
         const fri=iso(addD(pd(w.mon),4));
         if(WIZ.vacationWeeks.has(w.mon)) return; // held for vacation
         if(k.consider[w.mon]?.length||k.planned[w.mon]) return;
-        let pick=null, pickSIdx=-1;
+        let pick=null, pickSessId=null, pickLoc=null;
         for(let a=0;a<scored.length;a++){
           const {c}=scored[(ri+a)%scored.length];
           if(!campAvail(c,w.mon,fri)) continue;
-          let si=-1;
+          let sessId=null, loc=null;
           if(c.sleep){
-            si=getSessIdx(c,w.mon,fri);
-            if(si<0||usedSess.has(`${c.id}-${si}`)) continue;
+            const sf=getSessForWeek(c,w.mon,fri);
+            if(!sf||usedSess.has(sf.sess.id)) continue;
+            sessId=sf.sess.id; loc=sf.loc;
           }
-          if(cap!==null && budgetSpent+projCost(c,si,1)>cap) continue; // over budget
-          if(c.sleep){usedSess.add(`${c.id}-${si}`);pickSIdx=si;}
+          if(cap!==null && budgetSpent+projCost(c,sessId,1)>cap) continue; // over budget
+          if(c.sleep){usedSess.add(sessId);pickSessId=sessId;pickLoc=loc;}
           pick=c;
           ri=(ri+a+1)%scored.length;
           break;
         }
         if(!pick) return;
-        recordCost(pick,pickSIdx,1);
-        if(pick.sleep&&pickSIdx>=0) addSleepSession(k,pick,pickSIdx);
+        recordCost(pick,pickSessId,1);
+        if(pick.sleep&&pickSessId!=null) addSleepSession(k,pick,pickSessId,pickLoc?.id,pickLoc?.name);
         else {
           if(!k.consider[w.mon]) k.consider[w.mon]=[];
-          k.consider[w.mon].push({campId:pick.id,sessIdx:null,color:pick.color,name:pick.name});
+          k.consider[w.mon].push({campId:pick.id,sessId:null,locationId:null,locationName:null,color:pick.color,name:pick.name});
         }
+        const pickSess=pickSessId!=null?findSessById(pick,pickSessId)?.sess:null;
         WIZ._recs.push({mon:w.mon,weekLabel:`${fmt(pd(w.mon))} – ${fmt(pd(fri))}`,
           campName:pick.name,type:pick.type,isSleep:pick.sleep,kidLabel:n>1?kidName:null,
-          cost:fmtCost(pick.sessions?.[pickSIdx]?.cost??pick.cost,sessCostN(pick,pickSIdx),pick.sleep)});
+          cost:fmtCost(pickSess?.cost??pick.cost,sessCostN(pick,pickSessId),pick.sleep)});
       });
     });
     // Add vacation entries — one per vacation week that falls in any kid's schedule
