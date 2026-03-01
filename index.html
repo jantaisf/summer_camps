@@ -839,7 +839,16 @@ function getSessForWeek(camp, mon, fri) {
 }
 function campPassesFilters(c) {
   const age = S.kids[S.activeKid].age;
-  if(age && (parseInt(age)<c.ageMin || parseInt(age)>c.ageMax)) return false;
+  if(age) {
+    const ageNum = parseInt(age);
+    const sessWithAge = c.sessions.filter(s => s.ageMin!=null || s.ageMax!=null);
+    if(sessWithAge.length) {
+      if(!sessWithAge.some(s=>(s.ageMin==null||ageNum>=s.ageMin)&&(s.ageMax==null||ageNum<=s.ageMax))) return false;
+    } else {
+      if(c.ageMin && ageNum<c.ageMin) return false;
+      if(c.ageMax && ageNum>c.ageMax) return false;
+    }
+  }
   if(S.slFilter==='day' && c.sleep) return false;
   if(S.slFilter==='sleep' && !c.sleep) return false;
   const ctags = c.tags || (c.type||'').split(',').map(t=>t.trim()).filter(Boolean);
@@ -1260,7 +1269,13 @@ function renderCamps() {
   // Expand multi-location camps into per-location cards
   const cards = [];
   for (const camp of filtered) {
-    const namedLocs = (camp.locations || []).filter(l => l.name && l.sessions.length);
+    const _kidAge = parseInt(S.kids[S.activeKid].age) || 0;
+    const namedLocs = (camp.locations || []).filter(l => {
+      if (!l.name || !l.sessions.length) return false;
+      if (!_kidAge) return true;
+      const sw = l.sessions.filter(s => s.ageMin!=null || s.ageMax!=null);
+      return !sw.length || sw.some(s=>(s.ageMin==null||_kidAge>=s.ageMin)&&(s.ageMax==null||_kidAge<=s.ageMax));
+    });
     if (namedLocs.length > 1) {
       namedLocs.forEach(loc => cards.push({ camp, loc }));
     } else {
@@ -1313,7 +1328,12 @@ function renderCamps() {
         locsForSess.flatMap(l=>{
           if(!l.sessions.length) return [];
           const locHeader = (_multiLoc && l.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${l.name}${l.loc?' · <span style="font-weight:400">'+l.loc+'</span>':''}</li>`] : [];
-          return [...locHeader, ...l.sessions.map(s=>{
+          const _age = parseInt(S.kids[S.activeKid].age) || 0;
+          const _visibleSess = l.sessions.filter(s =>
+            !_age || s.ageMin==null && s.ageMax==null ||
+            (s.ageMin==null||_age>=s.ageMin) && (s.ageMax==null||_age<=s.ageMax)
+          );
+          return [...locHeader, ..._visibleSess.map(s=>{
             const considering=isSessionConsidering(camp.id,s.id);
             const planned=isSessionPlanned(camp.id,s.id);
             const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
@@ -2088,6 +2108,7 @@ async function loadCamps() {
             cost:        s.cost || null, costN: s.cost_n || 0,
             startTime:   s.start_time || null, endTime: s.end_time || null,
             appDeadline: s.app_deadline || null,
+            ageMin:      s.age_min ?? null, ageMax: s.age_max ?? null,
           })),
       }));
       return {
