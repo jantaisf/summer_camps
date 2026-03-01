@@ -1425,7 +1425,8 @@ function renderCamps() {
             const dateRows = prog.dates.map(d=>{
               const considering=isSessionConsidering(camp.id,d.id);
               const planned=isSessionPlanned(camp.id,d.id);
-              const dateLabel=`📅 ${fmt(pd(d.s))} – ${fmt(pd(d.e))}`;
+              const dateCostStr = d.costN>0 && d.costN!==prog.costN ? ` · $${d.costN.toLocaleString()}` : '';
+              const dateLabel=`📅 ${fmt(pd(d.s))} – ${fmt(pd(d.e))}${dateCostStr}`;
               if(planned) return `<li class="sess-planned date-row" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${d.id})"><span class="sess-label">${dateLabel}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
               if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕</button></span></li>`;
               return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Consider</span></li>`;
@@ -2222,7 +2223,7 @@ async function loadCamps() {
             virtual:     prog.virtual || false,
             dates: (prog.session_dates || [])
               .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date })),
+              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0 })),
           })),
       }));
       return {
@@ -2256,7 +2257,7 @@ async function loadCamps() {
               prog.dates.map(d => ({
                 id: d.id,
                 s: d.s, e: d.e, lbl: prog.lbl,
-                cost: prog.cost, costN: prog.costN,
+                cost: d.cost || prog.cost, costN: d.costN || prog.costN,
                 startTime: prog.startTime, endTime: prog.endTime,
                 appDeadline: prog.appDeadline,
                 ageMin: prog.ageMin, ageMax: prog.ageMax,
