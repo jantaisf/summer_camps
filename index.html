@@ -1225,7 +1225,12 @@ function renderCamps() {
     countEl.textContent = '';
   } else {
     titleEl.textContent = S.selWeek ? `${fmt(pd(S.selWeek))} – ${fmt(addD(pd(S.selWeek),4))}` : 'All Camps';
-    countEl.textContent = `${filtered.length} camp${filtered.length!==1?'s':''}`;
+    // Count cards (multi-location camps expand to one card per location)
+    const _cardCount = filtered.reduce((n,c) => {
+      const nl = (c.locations||[]).filter(l=>l.name&&l.sessions.length);
+      return n + (nl.length > 1 ? nl.length : 1);
+    }, 0);
+    countEl.textContent = `${_cardCount} camp${_cardCount!==1?'s':''}`;
   }
 
   const mapEl = document.getElementById('campMap');
@@ -1251,15 +1256,34 @@ function renderCamps() {
   }
 
   const backBtn = isFocused ? `<div style="padding:.3rem 0 .65rem"><button onclick="clearFocusedCamp()" style="background:none;border:none;color:var(--primary);font-size:.83rem;font-weight:700;cursor:pointer;padding:0">← All camps</button></div>` : '';
-  grid.innerHTML = backBtn + filtered.map(camp => {
+
+  // Expand multi-location camps into per-location cards
+  const cards = [];
+  for (const camp of filtered) {
+    const namedLocs = (camp.locations || []).filter(l => l.name && l.sessions.length);
+    if (namedLocs.length > 1) {
+      namedLocs.forEach(loc => cards.push({ camp, loc }));
+    } else {
+      cards.push({ camp, loc: null });
+    }
+  }
+
+  grid.innerHTML = backBtn + cards.map(({camp, loc}) => {
     const fri = S.selWeek ? iso(addD(pd(S.selWeek),4)) : null;
-    const isExp = S.expandCard===camp.id;
+    const cardKey = loc ? 'loc_' + loc.id : camp.id;
+    const isExp = isFocused || S.expandCard === cardKey;
     let sessInfo='', sessForWeek=null;
-    if(S.selWeek&&camp.sleep){
-      sessForWeek=getSessForWeek(camp,S.selWeek,fri);
-      if(sessForWeek){
-        const {sess:s,loc}=sessForWeek;
-        sessInfo=`<div class="session-pill">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} &nbsp;·&nbsp; ${s.lbl}${loc.name?' · '+loc.name:''}</div>`;
+    if(S.selWeek) {
+      if(loc) {
+        const wm=pd(S.selWeek), wf=pd(fri);
+        const sess = loc.sessions.find(s => pd(s.s)<=wf && pd(s.e)>=wm);
+        if(sess) sessForWeek = {sess, loc};
+      } else {
+        sessForWeek = getSessForWeek(camp, S.selWeek, fri);
+      }
+      if(sessForWeek) {
+        const {sess:s}=sessForWeek;
+        sessInfo=`<div class="session-pill">📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} &nbsp;·&nbsp; ${s.lbl}</div>`;
       }
     }
     const verifiedBadge = camp.custom ? '' : (
@@ -1270,31 +1294,34 @@ function renderCamps() {
           : `<div class="est-pill">~ 2026 dates estimated</div>`);
     let btn;
     if(S.selWeek){
-      const avail=campAvail(camp,S.selWeek,fri);
+      const avail = loc
+        ? (() => { const wm=pd(S.selWeek),wf=pd(fri); return loc.sessions.some(s=>pd(s.s)<=wf&&pd(s.e)>=wm); })()
+        : campAvail(camp,S.selWeek,fri);
       btn=avail
         ?`<button class="btn btn-solid" onclick="event.stopPropagation();addToPlan(${camp.id},${sessForWeek?.sess?.id??null})">+ Consider</button>`
         :`<button class="btn btn-solid" disabled onclick="event.stopPropagation()">Not available</button>`;
     } else {
-      const campInfoLink = camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : '';
+      const campInfoLink = (loc?.url||camp.url) ? `<a class="btn btn-outline" href="${loc?.url||camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : '';
       btn = campInfoLink || `<span></span>`;
     }
     let sessionsSection='';
-    const _hasSleepSessions = camp.locations?.some(l=>l.sessions.length);
+    const locsForSess = loc ? [loc] : camp.locations;
+    const _hasSleepSessions = locsForSess?.some(l=>l.sessions.length);
     if(_hasSleepSessions) {
-      const _multiLoc = camp.locations.filter(l=>l.sessions.length).length > 1 || camp.locations.some(l=>l.name);
+      const _multiLoc = !loc && (locsForSess.filter(l=>l.sessions.length).length > 1 || locsForSess.some(l=>l.name));
       sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div><ul class="sessions-list">${
-        camp.locations.flatMap(loc=>{
-          if(!loc.sessions.length) return [];
-          const locHeader = (_multiLoc && loc.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${loc.name}${loc.loc?' · <span style="font-weight:400">'+loc.loc+'</span>':''}</li>`] : [];
-          return [...locHeader, ...loc.sessions.map(s=>{
+        locsForSess.flatMap(l=>{
+          if(!l.sessions.length) return [];
+          const locHeader = (_multiLoc && l.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${l.name}${l.loc?' · <span style="font-weight:400">'+l.loc+'</span>':''}</li>`] : [];
+          return [...locHeader, ...l.sessions.map(s=>{
             const considering=isSessionConsidering(camp.id,s.id);
             const planned=isSessionPlanned(camp.id,s.id);
             const timeStr = (s.startTime||s.endTime) ? ` · ${[fmtTime(s.startTime),fmtTime(s.endTime)].filter(Boolean).join('–')}` : '';
             const deadlineStr = s.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(s.appDeadline))}</span>` : '';
             const label=`📅 ${fmt(pd(s.s))} – ${fmt(pd(s.e))} · ${s.lbl}${timeStr}`;
             if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${s.id})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${s.id},${loc.id},${JSON.stringify(loc.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${s.id})">✕</button></span></li>`;
-            return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${s.id},${loc.id},${JSON.stringify(loc.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
+            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${s.id})">✕</button></span></li>`;
+            return `<li onclick="event.stopPropagation();addSessionToConsider(${camp.id},${s.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${label}${deadlineStr}</span><span class="sess-action">+ Consider</span></li>`;
           })];
         }).join('')
       }</ul></div>`;
@@ -1314,7 +1341,7 @@ function renderCamps() {
     }
     const expandSection = isExp ? `<div class="card-expand" style="display:flex;justify-content:space-between;align-items:center">
       <div style="display:flex;gap:.4rem">
-        ${camp.url ? `<a class="btn btn-outline" href="${camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : ''}
+        ${(loc?.url||camp.url) ? `<a class="btn btn-outline" href="${loc?.url||camp.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Camp Info →</a>` : ''}
       </div>
       ${camp.custom ? `<div style="display:flex;gap:.5rem">
         <button class="btn btn-outline" style="font-size:.73rem;border-color:#94a3b8;color:#64748b" onclick="event.stopPropagation();openAddCampModal(${camp.id})">✏ Edit</button>
@@ -1358,12 +1385,22 @@ function renderCamps() {
         groupFriendsHtml = `<div class="group-friends">👥 ${indicators.join(' · ')}</div>`;
       }
     }
+    const cardName = loc ? loc.name : camp.name;
+    const locationMeta = loc
+      ? [loc.city, loc.state].filter(Boolean).join(', ')
+      : (camp.locations?.length > 1
+          ? camp.locations.map(l=>l.name||l.city).filter(Boolean).join(', ')
+          : [camp.city, camp.state].filter(Boolean).join(', ') || camp.loc || '—');
+    const cardCost = loc ? (loc.sessions[0]?.cost || camp.cost) : camp.cost;
 
-    return `<div class="card${isExp?' expanded':''}" onclick="toggleCard(${camp.id})">
+    return `<div class="card${isExp?' expanded':''}" onclick="toggleCard(${JSON.stringify(cardKey)})">
       <div class="card-bar" style="background:${camp.color}"></div>
       <div class="card-body">
         <div class="card-top">
-          <div class="card-name">${camp.name}</div>
+          <div>
+            <div class="card-name">${cardName}</div>
+            ${loc ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${camp.name}</div>` : ''}
+          </div>
           <div class="badges">
             ${camp.custom ? '<span class="badge badge-custom">Custom</span>' : ''}
             <span class="badge ${camp.sleep?'badge-sleep':'badge-day'}">${camp.sleep?'Sleepaway':'Day'}</span>
@@ -1377,15 +1414,15 @@ function renderCamps() {
         ${verifiedBadge}
         <div class="card-meta">
           <span class="mk">Ages</span><span class="mv">${camp.ageMin}–${camp.ageMax}</span>
-          <span class="mk">Location</span><span class="mv">${camp.locations?.length>1 ? camp.locations.map(l=>l.name||l.city).filter(Boolean).join(', ') : [camp.city, camp.state].filter(Boolean).join(', ') || camp.loc || '—'}</span>
-          ${isExp && camp.street ? `<span class="mk">Address</span><span class="mv">${camp.loc}</span>` : ''}
+          <span class="mk">Location</span><span class="mv">${locationMeta}</span>
+          ${isExp && (loc?.street||camp.street) ? `<span class="mk">Address</span><span class="mv">${loc?.loc||camp.loc}</span>` : ''}
           ${camp.custom ? '' : `<span class="mk">Apply/info</span><span class="mv">${camp.apply}</span>`}
         </div>
         ${groupFriendsHtml}
       </div>
       ${isExp ? sessionsSection : ''}
       <div class="card-foot">
-        <span class="cost">${camp.cost}</span>
+        <span class="cost">${cardCost}</span>
         ${btn}
       </div>
       ${expandSection}
