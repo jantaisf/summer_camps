@@ -670,6 +670,20 @@
         <option value="">All activities</option>
       </select>
     </div>
+    <div class="sg">
+      <label>Distance</label>
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <input type="text" id="zipInput" placeholder="ZIP" maxlength="5" inputmode="numeric"
+          style="width:62px;padding:.28rem .4rem;border:1px solid var(--border);border-radius:6px;font-size:.82rem;background:var(--surface)">
+        <select id="distFilter" style="padding:.28rem .4rem;border:1px solid var(--border);border-radius:6px;font-size:.82rem;background:var(--surface)">
+          <option value="">Any distance</option>
+          <option value="5">within 5 mi</option>
+          <option value="10">within 10 mi</option>
+          <option value="20">within 20 mi</option>
+          <option value="50">within 50 mi</option>
+        </select>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -786,6 +800,7 @@ const S = {
   ],
   activeKid: 0, variant: null, customCamps: [], mapView: false, vacation: {}, focusedCamp: null,
   slFilter:"", actFilter:"", q:"", selWeek:null, expandCard:null, appFilter:"",
+  zipFilter:"", distFilter:"", _userLat:null, _userLng:null,
   profile: { homeAddress:'', workAddress:'' },
   household: null,   // { id, ownerId, isOwner } | null
   group: null        // { id, name, inviteCode, members:[{userId,displayName,planData}] } | null
@@ -837,6 +852,23 @@ function getSessForWeek(camp, mon, fri) {
   }
   return null;
 }
+function haversineMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8, toR = Math.PI/180;
+  const dLat = (lat2-lat1)*toR, dLng = (lng2-lng1)*toR;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+async function geocodeZip(zip) {
+  if(!/^\d{5}$/.test(zip)) { S._userLat=null; S._userLng=null; renderCamps(); return; }
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${zip}&countrycodes=us&format=json&limit=1`,
+      {headers:{'Accept-Language':'en'}});
+    const d = await r.json();
+    if(d[0]) { S._userLat=parseFloat(d[0].lat); S._userLng=parseFloat(d[0].lon); }
+    else { S._userLat=null; S._userLng=null; }
+  } catch(e) { S._userLat=null; S._userLng=null; }
+  renderCamps();
+}
 function campPassesFilters(c) {
   const age = S.kids[S.activeKid].age;
   if(age) {
@@ -855,6 +887,12 @@ function campPassesFilters(c) {
   if(S.actFilter && !ctags.includes(S.actFilter)) return false;
   if(S.appFilter==='apply' && !c.appRequired) return false;
   if(S.appFilter==='reg' && c.appRequired) return false;
+  if(S._userLat!=null && S.distFilter) {
+    const maxMi = parseFloat(S.distFilter);
+    const locs = c.locations || [];
+    const locsWithCoords = locs.filter(l => l.lat!=null && l.lng!=null);
+    if(locsWithCoords.length && !locsWithCoords.some(l => haversineMi(S._userLat,S._userLng,l.lat,l.lng)<=maxMi)) return false;
+  }
   const locStr = (c.locations||[]).map(l=>[l.name,l.city,l.state].filter(Boolean).join(' ')).join(' ') || c.loc;
   if(S.q && !`${c.name} ${c.desc} ${locStr} ${ctags.join(' ')}`.toLowerCase().includes(S.q.toLowerCase())) return false;
   return true;
@@ -1272,9 +1310,14 @@ function renderCamps() {
     const _kidAge = parseInt(S.kids[S.activeKid].age) || 0;
     const namedLocs = (camp.locations || []).filter(l => {
       if (!l.name || !l.sessions.length) return false;
-      if (!_kidAge) return true;
-      const sw = l.sessions.filter(s => s.ageMin!=null || s.ageMax!=null);
-      return !sw.length || sw.some(s=>(s.ageMin==null||_kidAge>=s.ageMin)&&(s.ageMax==null||_kidAge<=s.ageMax));
+      if (_kidAge) {
+        const sw = l.sessions.filter(s => s.ageMin!=null || s.ageMax!=null);
+        if (sw.length && !sw.some(s=>(s.ageMin==null||_kidAge>=s.ageMin)&&(s.ageMax==null||_kidAge<=s.ageMax))) return false;
+      }
+      if (S._userLat!=null && S.distFilter && l.lat!=null && l.lng!=null) {
+        if (haversineMi(S._userLat,S._userLng,l.lat,l.lng) > parseFloat(S.distFilter)) return false;
+      }
+      return true;
     });
     if (namedLocs.length > 1) {
       namedLocs.forEach(loc => cards.push({ camp, loc }));
@@ -2055,6 +2098,12 @@ document.querySelectorAll('.tgl[data-app]').forEach(b=>b.addEventListener('click
 }));
 document.getElementById('actFilter').addEventListener('change', e=>{ S.actFilter=e.target.value; renderAll(); });
 document.getElementById('campSearch').addEventListener('input', e=>{ S.q=e.target.value; renderAll(); });
+document.getElementById('distFilter').addEventListener('change', e=>{ S.distFilter=e.target.value; renderCamps(); });
+document.getElementById('zipInput').addEventListener('input', e=>{
+  S.zipFilter=e.target.value;
+  if(e.target.value.length===5) geocodeZip(e.target.value);
+  else { S._userLat=null; S._userLng=null; renderCamps(); }
+});
 
 renderKidRows();
 updatePanelWidth();
@@ -2094,6 +2143,8 @@ async function loadCamps() {
         zip:     loc.zip || null,
         country: loc.country || null,
         url:     loc.url || null,
+        lat:     loc.lat ?? null,
+        lng:     loc.lng ?? null,
         get loc() {
           return [this.street, this.city, [this.state, this.zip].filter(Boolean).join(' ')]
                    .filter(Boolean).join(', ') || '';
