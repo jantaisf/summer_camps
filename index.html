@@ -1528,7 +1528,7 @@ function renderCamps() {
         groupFriendsHtml = `<div class="group-friends">👥 ${indicators.join(' · ')}</div>`;
       }
     }
-    const cardName = loc ? loc.name : camp.name;
+    const cardName = camp.name;
     const locationMeta = loc
       ? [loc.city, loc.state].filter(Boolean).join(', ')
       : (camp.locations?.length > 1
@@ -1543,7 +1543,7 @@ function renderCamps() {
         <div class="card-top">
           <div>
             <div class="card-name">${cardName}</div>
-            ${loc ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${camp.name}</div>` : ''}
+            ${loc?.name ? `<div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">📍 ${loc.name}</div>` : ''}
           </div>
           <div class="badges">
             ${camp.custom ? '<span class="badge badge-custom">Custom</span>' : ''}
@@ -2258,7 +2258,7 @@ async function loadCamps() {
     .eq('active', true).order('name');
   if (data) {
     CAMPS = data.map(row => {
-      const locations = (row.locations || []).map(loc => ({
+      const locations = (row.locations || []).sort((a, b) => (a.name||'') < (b.name||'') ? -1 : 1).map(loc => ({
         id:      loc.id,
         campId:  loc.camp_id,
         name:    loc.name || null,
