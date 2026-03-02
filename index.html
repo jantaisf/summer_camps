@@ -244,6 +244,7 @@
     .prog-meta { font-size:.7rem; color:var(--muted); font-weight:400; }
     .date-row { padding-left:.9rem; }
     .prog-promo { padding:.1rem .9rem .35rem; font-size:.7rem; color:var(--green); font-style:italic; border:none!important; background:none!important; cursor:default; }
+    .prog-notes { padding:.1rem .9rem .35rem; font-size:.7rem; color:var(--muted); font-style:italic; border:none!important; background:none!important; cursor:default; }
 
     /* ── Auth modal ── */
     .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6);
@@ -1427,6 +1428,7 @@ function renderCamps() {
             const deadlineStr = prog.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(prog.appDeadline))}</span>` : '';
             const progHeader = `<li class="prog-header">${prog.lbl}${virtBadge}<span class="prog-meta">${ageStr}${costStr}${timeStr}</span>${deadlineStr}</li>`;
             const promoRow = prog.promoNote ? [`<li class="prog-promo">🏷 ${prog.promoNote}</li>`] : [];
+            const notesRow = prog.notes ? [`<li class="prog-notes">ℹ️ ${prog.notes}</li>`] : [];
             const dateRows = prog.dates.map(d=>{
               const considering=isSessionConsidering(camp.id,d.id);
               const planned=isSessionPlanned(camp.id,d.id);
@@ -1437,7 +1439,7 @@ function renderCamps() {
               if(d.full) return `<li class="sess-full date-row"><span class="sess-label">${dateLabel}</span><span class="sess-action">Full</span></li>`;
               return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Short list</span></li>`;
             });
-            return [progHeader, ...promoRow, ...dateRows];
+            return [progHeader, ...promoRow, ...notesRow, ...dateRows];
           })];
         }).join('')
       }</ul></div>`;
@@ -2229,6 +2231,7 @@ async function loadCamps() {
             ageMin:      prog.age_min ?? null, ageMax: prog.age_max ?? null,
             virtual:     prog.virtual || false,
             promoNote:   prog.promo_note || null,
+            notes:       prog.notes || null,
             dates: (prog.session_dates || [])
               .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
               .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, memberCost: d.member_cost || null, memberCostN: d.member_cost_n || 0, full: d.is_full || false, weekName: d.session_week_name || null })),
