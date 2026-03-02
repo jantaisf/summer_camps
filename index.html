@@ -2037,7 +2037,13 @@ function renderMap(filtered) {
   filtered.forEach(camp => {
     const locs = camp.locations?.length ? camp.locations : [null];
     locs.forEach(loc => {
-      const c = camp.custom ? null : COORDS[camp.id];
+      let c;
+      if (loc?.lat != null && loc?.lng != null) {
+        c = [loc.lat, loc.lng];
+      } else {
+        if (shownCamps.has(camp.id)) return; // already placed a fallback pin for this camp
+        c = camp.custom ? null : COORDS[camp.id];
+      }
       if(!c) {
         if(!shownCamps.has(camp.id)) { if(camp.custom) missing.push(camp.name); shownCamps.add(camp.id); }
         return;
