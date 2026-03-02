@@ -239,12 +239,24 @@
     .card.expanded .card-chevron { transform: rotate(180deg); }
     .prog-header { list-style:none; font-size:.78rem; font-weight:700;
       padding:.5rem 0 .15rem; border-top:1px solid var(--border); margin-top:.25rem;
-      display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+      display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; cursor:pointer; }
     .prog-header:first-child { border-top:none; margin-top:0; }
+    .prog-header:hover { color:var(--primary); }
     .prog-meta { font-size:.7rem; color:var(--muted); font-weight:400; }
     .date-row { padding-left:.9rem; }
     .prog-promo { padding:.1rem .9rem .35rem; font-size:.7rem; color:var(--green); font-style:italic; border:none!important; background:none!important; cursor:default; }
-    .prog-notes { padding:.1rem .9rem .35rem; font-size:.7rem; color:var(--muted); font-style:italic; border:none!important; background:none!important; cursor:default; }
+    /* Program info modal */
+    .prog-info-overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; z-index:999; }
+    .prog-info-overlay.open { display:flex; }
+    .prog-info-modal { background:#fff; border-radius:16px; padding:1.5rem 1.75rem; width:440px; max-width:calc(100vw - 2rem); max-height:80vh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,.2); position:relative; }
+    .prog-info-close { position:absolute; top:.75rem; right:.9rem; background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--muted); line-height:1; }
+    .prog-info-close:hover { color:var(--text); }
+    .prog-info-title { font-size:1rem; font-weight:800; font-family:'Outfit',sans-serif; margin-bottom:.2rem; padding-right:1.5rem; }
+    .prog-info-loc { font-size:.75rem; color:var(--muted); margin-bottom:.7rem; }
+    .prog-info-chips { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.7rem; }
+    .prog-info-chip { font-size:.72rem; background:#f1f5f9; color:#475569; border-radius:6px; padding:.2rem .5rem; font-weight:600; }
+    .prog-info-notes { font-size:.8rem; color:#475569; line-height:1.55; background:#f8fafc; border-left:3px solid #cbd5e1; border-radius:0 6px 6px 0; padding:.65rem .85rem; margin-top:.6rem; }
+    .prog-info-promo { font-size:.78rem; color:var(--green); font-style:italic; margin-top:.5rem; }
 
     /* ── Auth modal ── */
     .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6);
@@ -633,6 +645,14 @@
     </div>
     <div id="authMsg" class="auth-msg"></div>
     <button class="auth-submit" id="authSubmit" onclick="handleAuth()">Sign in</button>
+  </div>
+</div>
+
+<!-- Program info modal -->
+<div id="progInfoOverlay" class="prog-info-overlay" onclick="closeProgInfo()">
+  <div class="prog-info-modal" onclick="event.stopPropagation()">
+    <button class="prog-info-close" onclick="closeProgInfo()">✕</button>
+    <div id="progInfoContent"></div>
   </div>
 </div>
 
@@ -1426,9 +1446,8 @@ function renderCamps() {
             const costStr = prog.costN>0 ? ` $${prog.costN.toLocaleString()}` : (prog.cost&&prog.cost!=='See website'?` ${prog.cost}`:'');
             const virtBadge = prog.virtual ? `<span style="font-size:.68rem;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:.05rem .3rem;margin-left:.3rem;font-weight:600">Virtual</span>` : '';
             const deadlineStr = prog.appDeadline ? `<span class="sess-deadline">Apply by ${fmt(pd(prog.appDeadline))}</span>` : '';
-            const progHeader = `<li class="prog-header">${prog.lbl}${virtBadge}<span class="prog-meta">${ageStr}${costStr}${timeStr}</span>${deadlineStr}</li>`;
+            const progHeader = `<li class="prog-header" onclick="event.stopPropagation();showProgInfo(${camp.id},${prog.id},${l.id})">${prog.lbl}${virtBadge}<span class="prog-meta">${ageStr}${costStr}${timeStr}</span>${deadlineStr}<span style="margin-left:auto;font-size:.65rem;color:var(--muted)">ℹ</span></li>`;
             const promoRow = prog.promoNote ? [`<li class="prog-promo">🏷 ${prog.promoNote}</li>`] : [];
-            const notesRow = prog.notes ? [`<li class="prog-notes">ℹ️ ${prog.notes}</li>`] : [];
             const dateRows = prog.dates.map(d=>{
               const considering=isSessionConsidering(camp.id,d.id);
               const planned=isSessionPlanned(camp.id,d.id);
@@ -1439,7 +1458,7 @@ function renderCamps() {
               if(d.full) return `<li class="sess-full date-row"><span class="sess-label">${dateLabel}</span><span class="sess-action">Full</span></li>`;
               return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Short list</span></li>`;
             });
-            return [progHeader, ...promoRow, ...notesRow, ...dateRows];
+            return [progHeader, ...promoRow, ...dateRows];
           })];
         }).join('')
       }</ul></div>`;
@@ -2193,6 +2212,39 @@ let _campsLoaded = false;
 let _isAdmin = false;
 
 loadCamps(); // public table — no auth required
+
+// ── Program info modal ────────────────────────────────────────────────────
+function showProgInfo(campId, progId, locId) {
+  const camp = allCamps().find(c => c.id === campId);
+  if (!camp) return;
+  const loc = camp.locations.find(l => l.id === locId);
+  if (!loc) return;
+  const prog = loc.programs.find(p => p.id === progId);
+  if (!prog) return;
+
+  const ageStr = (prog.ageMin!=null||prog.ageMax!=null) ? `Ages ${prog.ageMin??''}${(prog.ageMin!=null&&prog.ageMax!=null)?'–':''}${prog.ageMax??''}` : null;
+  const timeStr = (prog.startTime||prog.endTime) ? `${[fmtTime(prog.startTime),fmtTime(prog.endTime)].filter(Boolean).join('–')}` : null;
+  const costStr = prog.costN>0 ? `$${prog.costN.toLocaleString()}${camp.sleep?'/session':'/wk'}` : (prog.cost||null);
+  const memberStr = prog.memberCostN>0 ? `$${prog.memberCostN.toLocaleString()} members` : (prog.memberCost&&prog.memberCost!=='See website'?`${prog.memberCost} members`:null);
+  const chips = [ageStr, timeStr, costStr, memberStr, prog.virtual?'Virtual':null]
+    .filter(Boolean).map(s=>`<span class="prog-info-chip">${s}</span>`).join('');
+  const locHtml = loc.name ? `<div class="prog-info-loc">📍 ${loc.name}</div>` : '';
+  const deadlineHtml = prog.appDeadline ? `<div style="font-size:.75rem;color:var(--muted);margin:.25rem 0 .5rem">Apply by ${fmt(pd(prog.appDeadline))}</div>` : '';
+  const promoHtml = prog.promoNote ? `<div class="prog-info-promo">🏷 ${prog.promoNote}</div>` : '';
+  const notesHtml = prog.notes ? `<div class="prog-info-notes">${prog.notes}</div>` : '';
+
+  document.getElementById('progInfoContent').innerHTML = `
+    <div class="prog-info-title">${prog.lbl}</div>
+    ${locHtml}
+    <div class="prog-info-chips">${chips}</div>
+    ${deadlineHtml}${promoHtml}${notesHtml}
+  `;
+  document.getElementById('progInfoOverlay').classList.add('open');
+}
+function closeProgInfo() {
+  document.getElementById('progInfoOverlay').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeProgInfo(); });
 
 async function loadCamps() {
   const { data } = await sb.from('camps')
