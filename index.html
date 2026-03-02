@@ -227,6 +227,8 @@
     .sess-full .sess-action { color: #94a3b8; font-weight: 600; }
     .sess-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
     .sess-deadline { font-size: .67rem; font-weight: 700; color: #b45309; }
+    .reg-link { font-size: .68rem; font-weight: 600; color: #64748b; text-decoration: none; white-space: nowrap; flex-shrink: 0; }
+    .reg-link:hover { color: var(--primary); text-decoration: underline; }
     .sess-loc { font-size: .67rem; color: #64748b; }
     .sess-action { font-size: .7rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
       color: var(--primary); display: flex; align-items: center; gap: .25rem; }
@@ -1453,10 +1455,11 @@ function renderCamps() {
               const planned=isSessionPlanned(camp.id,d.id);
               const dateCostStr = d.costN>0 && d.costN!==prog.costN ? ` · $${d.costN.toLocaleString()}` : '';
               const dateLabel=`📅 ${fmt(pd(d.s))} – ${fmt(pd(d.e))}${d.weekName ? ` · ${d.weekName}` : ''}${dateCostStr}`;
-              if(planned) return `<li class="sess-planned date-row" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${d.id})"><span class="sess-label">${dateLabel}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-              if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕</button></span></li>`;
-              if(d.full) return `<li class="sess-full date-row"><span class="sess-label">${dateLabel}</span><span class="sess-action">Full</span></li>`;
-              return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span><span class="sess-action">+ Short list</span></li>`;
+              const regLink = d.regUrl ? `<a href="${d.regUrl}" target="_blank" rel="noopener" class="reg-link" onclick="event.stopPropagation()">Register ↗</a>` : '';
+              if(planned) return `<li class="sess-planned date-row" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${d.id})"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">✓ Planned · ✕</span></li>`;
+              if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕</button></span></li>`;
+              if(d.full) return `<li class="sess-full date-row"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">Full</span></li>`;
+              return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">+ Short list</span></li>`;
             });
             return [progHeader, ...promoRow, ...dateRows];
           })];
@@ -2286,7 +2289,7 @@ async function loadCamps() {
             notes:       prog.notes || null,
             dates: (prog.session_dates || [])
               .sort((a, b) => a.start_date < b.start_date ? -1 : 1)
-              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, memberCost: d.member_cost || null, memberCostN: d.member_cost_n || 0, full: d.is_full || false, weekName: d.session_week_name || null })),
+              .map(d => ({ id: d.id, s: d.start_date, e: d.end_date, cost: d.cost || null, costN: d.cost_n || 0, memberCost: d.member_cost || null, memberCostN: d.member_cost_n || 0, full: d.is_full || false, weekName: d.session_week_name || null, regUrl: d.reg_url || null })),
           })),
       }));
       return {
