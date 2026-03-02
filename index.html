@@ -211,6 +211,7 @@
     .sessions-section { border-top: 1px solid var(--border); padding: .6rem .9rem .5rem; }
     .sessions-section-title { font-size: .7rem; font-weight: 700; color: var(--muted);
       text-transform: uppercase; letter-spacing: .05em; margin-bottom: .4rem; }
+    .reg-launch-notice { font-size:.72rem; color:#b45309; font-weight:600; margin-bottom:.5rem; }
     .card-expand { border-top: 1px solid var(--border); padding: .65rem .9rem; background: #f4f8fb; border-radius: 0 0 14px 14px; }
     .sessions-list { list-style: none; display: flex; flex-direction: column; gap: .25rem; margin-bottom: .6rem; }
     .sessions-list li { font-size: .78rem; padding: .28rem .5rem; background: white;
@@ -1427,10 +1428,12 @@ function renderCamps() {
     let sessionsSection='';
     const locsForSess = loc ? [loc] : camp.locations;
     const _hasSleepSessions = locsForSess?.some(l => l.programs?.some(p => p.dates.length));
+    const _regNotice = (camp.regLaunchDate && camp.regLaunchDate > new Date().toISOString().split('T')[0])
+      ? `<div class="reg-launch-notice">🗓 Registration opens ${fmt(pd(camp.regLaunchDate))}</div>` : '';
     if(_hasSleepSessions) {
       const _multiLoc = !loc && (locsForSess.filter(l=>l.programs?.some(p=>p.dates.length)).length > 1 || locsForSess.some(l=>l.name));
       const _age = parseInt(S.kids[S.activeKid].age) || 0;
-      sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div><ul class="sessions-list">${
+      sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">2026 Sessions</div>${_regNotice}<ul class="sessions-list">${
         locsForSess.flatMap(l=>{
           if(!l.programs?.some(p=>p.dates.length)) return [];
           const locHeader = (_multiLoc && l.name) ? [`<li style="list-style:none;font-size:.72rem;font-weight:700;color:var(--muted);padding:.35rem 0 .15rem;border-top:1px solid var(--border);margin-top:.25rem">📍 ${l.name}${l.loc?' · <span style="font-weight:400">'+l.loc+'</span>':''}</li>`] : [];
@@ -1468,7 +1471,7 @@ function renderCamps() {
     } else {
       const dayWeeks=getDayCampWeeks(camp);
       if(dayWeeks.length) {
-        sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">Weekly Schedule</div><ul class="sessions-list">${
+        sessionsSection=`<div class="sessions-section"><div class="sessions-section-title">Weekly Schedule</div>${_regNotice}<ul class="sessions-list">${
           dayWeeks.map(w=>{
             const considering=isDayWeekConsidering(camp.id,w.mon);
             const planned=isDayWeekPlanned(camp.id,w.mon);
@@ -2310,6 +2313,7 @@ async function loadCamps() {
         apply:        row.apply_info,
         appDeadline:  row.app_deadline || null,
         virtual:      row.virtual || false,
+        regLaunchDate: row.reg_launch_date || null,
         locations,
         // Backward-compat getters (single-location camps)
         get loc()    { return this.locations[0]?.loc || ''; },
