@@ -73,8 +73,10 @@
     .sum-stat strong { color: var(--primary); }
     .sum-stat.amber strong { color: var(--amber); }
     .sum-stat.green strong { color: var(--green); }
-    .sum-actions { display: flex; justify-content: flex-end; margin-top: .1rem; }
+    .sum-actions { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; margin-top: .1rem; }
     .clear-btn { font-size: .72rem; color: var(--red); background: none; border: none;
+      cursor: pointer; text-decoration: underline; }
+    .cal-btn { font-size: .72rem; color: var(--primary); background: none; border: none;
       cursor: pointer; text-decoration: underline; }
     .week-list { flex: 1; overflow-y: auto; padding: .4rem; }
     .week-list::-webkit-scrollbar { width: 5px; }
@@ -260,6 +262,25 @@
     .prog-info-chip { font-size:.72rem; background:#f1f5f9; color:#475569; border-radius:6px; padding:.2rem .5rem; font-weight:600; }
     .prog-info-notes { font-size:.8rem; color:#475569; line-height:1.55; background:#f8fafc; border-left:3px solid #cbd5e1; border-radius:0 6px 6px 0; padding:.65rem .85rem; margin-top:.6rem; }
     .prog-info-promo { font-size:.78rem; color:var(--green); font-style:italic; margin-top:.5rem; }
+
+    /* Calendar export modal */
+    .cal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; z-index:999; }
+    .cal-overlay.open { display:flex; }
+    .cal-modal { background:#fff; border-radius:16px; padding:1.5rem 1.75rem; width:480px; max-width:calc(100vw - 2rem); max-height:80vh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,.2); position:relative; }
+    .cal-modal-close { position:absolute; top:.75rem; right:.9rem; background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--muted); line-height:1; }
+    .cal-modal-close:hover { color:var(--text); }
+    .cal-modal-title { font-size:1rem; font-weight:800; font-family:'Outfit',sans-serif; margin-bottom:1rem; }
+    .cal-kid-section { margin-bottom:.85rem; }
+    .cal-kid-name { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin-bottom:.4rem; }
+    .cal-event-row { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.45rem .6rem; border-radius:8px; background:#f8fafc; margin-bottom:.3rem; }
+    .cal-event-info { flex:1; min-width:0; }
+    .cal-event-name { font-size:.8rem; font-weight:700; }
+    .cal-event-dates { font-size:.72rem; color:var(--muted); }
+    .cal-gcal-link { font-size:.72rem; color:var(--primary); white-space:nowrap; text-decoration:none; flex-shrink:0; }
+    .cal-gcal-link:hover { text-decoration:underline; }
+    .cal-actions { border-top:1px solid var(--border); margin-top:.85rem; padding-top:.85rem; display:flex; gap:.6rem; align-items:center; }
+    .cal-dl-btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:.5rem 1rem; font-size:.8rem; font-weight:700; cursor:pointer; }
+    .cal-dl-btn:hover { background:var(--primary-hover); }
 
     /* ── Auth modal ── */
     .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6);
@@ -656,6 +677,14 @@
   <div class="prog-info-modal" onclick="event.stopPropagation()">
     <button class="prog-info-close" onclick="closeProgInfo()">✕</button>
     <div id="progInfoContent"></div>
+  </div>
+</div>
+
+<!-- Calendar export modal -->
+<div id="calOverlay" class="cal-overlay" onclick="closeCalModal()">
+  <div class="cal-modal" onclick="event.stopPropagation()">
+    <button class="cal-modal-close" onclick="closeCalModal()">✕</button>
+    <div id="calModalContent"></div>
   </div>
 </div>
 
@@ -1183,6 +1212,109 @@ function toggleVacation(mon) {
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────
+// ── Calendar export ───────────────────────────────────────────────────────
+function _icsDate(dateStr) { return dateStr.replace(/-/g,''); }
+function _icsDateExclusive(dateStr) {
+  // iCal all-day DTEND is exclusive, so add 1 day past the last day
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0,10).replace(/-/g,'');
+}
+function _fmtShort(dateStr) {
+  const [,m,d] = dateStr.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1] + ' ' + +d;
+}
+function _toGCalUrl(title, start, end, loc) {
+  const p = new URLSearchParams({action:'TEMPLATE', text:title, dates:`${_icsDate(start)}/${_icsDateExclusive(end)}`});
+  if(loc) p.set('location', loc);
+  return 'https://calendar.google.com/calendar/render?' + p;
+}
+function _gatherCalEvents() {
+  const result = [];
+  S.kids.forEach((k, kidIdx) => {
+    const seen = new Set();
+    const evs = [];
+    Object.values(k.planned).forEach(e => {
+      if(seen.has(e.sessId)) return;
+      seen.add(e.sessId);
+      const camp = allCamps().find(c => c.id === e.campId);
+      if(!camp) return;
+      const found = e.sessId != null ? findDateById(camp, e.sessId) : null;
+      if(!found) return;
+      const {sess, loc} = found;
+      evs.push({
+        campName: camp.name,
+        progLabel: sess.lbl,
+        start: sess.s,
+        end: sess.e,
+        locationName: e.locationName || loc?.name || null,
+        city: loc?.city || null,
+      });
+    });
+    // sort by start date
+    evs.sort((a,b) => a.start < b.start ? -1 : 1);
+    if(evs.length) result.push({kidName: k.name, kidIdx, evs});
+  });
+  return result;
+}
+function showCalModal() {
+  const groups = _gatherCalEvents();
+  if(!groups.length) return;
+  let html = `<div class="cal-modal-title">📅 Export to Calendar</div>`;
+  groups.forEach(g => {
+    html += `<div class="cal-kid-section">`;
+    html += `<div class="cal-kid-name" style="color:${KID_COLORS[g.kidIdx]}">${g.kidName}</div>`;
+    g.evs.forEach(ev => {
+      const titleParts = [ev.campName];
+      if(ev.progLabel && ev.progLabel !== ev.campName) titleParts.push(ev.progLabel);
+      const title = titleParts.join(' — ');
+      const locStr = [ev.locationName, ev.city].filter(Boolean).join(', ');
+      const gcalUrl = _toGCalUrl(title, ev.start, ev.end, locStr);
+      html += `<div class="cal-event-row">
+        <div class="cal-event-info">
+          <div class="cal-event-name">${title}</div>
+          <div class="cal-event-dates">${_fmtShort(ev.start)} – ${_fmtShort(ev.end)}${locStr ? ' · ' + locStr : ''}</div>
+        </div>
+        <a class="cal-gcal-link" href="${gcalUrl}" target="_blank" rel="noopener">Google Cal ↗</a>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  html += `<div class="cal-actions"><button class="cal-dl-btn" onclick="downloadICS()">⬇ Download .ics</button></div>`;
+  document.getElementById('calModalContent').innerHTML = html;
+  document.getElementById('calOverlay').classList.add('open');
+}
+function closeCalModal() {
+  document.getElementById('calOverlay').classList.remove('open');
+}
+function downloadICS() {
+  const groups = _gatherCalEvents();
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//SF Summer Camp Planner//2026//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  groups.forEach(g => {
+    g.evs.forEach(ev => {
+      const titleParts = [ev.campName];
+      if(ev.progLabel && ev.progLabel !== ev.campName) titleParts.push(ev.progLabel);
+      const title = titleParts.join(' — ').replace(/[,;\\]/g, c => '\\'+c);
+      const loc = [ev.locationName, ev.city].filter(Boolean).join(', ').replace(/[,;\\]/g, c => '\\'+c);
+      const uid = `sfcamp-${ev.start}-${ev.campName.toLowerCase().replace(/\W+/g,'-')}@sfcampplanner`;
+      lines.push('BEGIN:VEVENT');
+      lines.push('DTSTART;VALUE=DATE:' + _icsDate(ev.start));
+      lines.push('DTEND;VALUE=DATE:' + _icsDateExclusive(ev.end));
+      lines.push('SUMMARY:' + title);
+      if(loc) lines.push('LOCATION:' + loc);
+      lines.push('UID:' + uid);
+      lines.push('END:VEVENT');
+    });
+  });
+  lines.push('END:VCALENDAR');
+  const blob = new Blob([lines.join('\r\n')], {type:'text/calendar'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'summer-camps-2026.ics';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
 function renderSummary() {
   const el = document.getElementById('summary');
   if(!WEEKS.length) { el.innerHTML=''; return; }
@@ -1209,7 +1341,7 @@ function renderSummary() {
       ${cost>0?`<span class="sum-stat green">~<strong>$${cost.toLocaleString()}</strong></span>`:''}
     </div>`;
   }).join('');
-  el.innerHTML = rows + (hasAny ? `<div class="sum-actions"><button class="clear-btn" onclick="clearPlan()">Clear All</button></div>` : '');
+  el.innerHTML = rows + (hasAny ? `<div class="sum-actions"><button class="cal-btn" onclick="showCalModal()">📅 Export</button><button class="clear-btn" onclick="clearPlan()">Clear All</button></div>` : '');
 }
 
 // ── Render weeks ──────────────────────────────────────────────────────────
