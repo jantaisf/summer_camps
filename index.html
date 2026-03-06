@@ -1055,7 +1055,7 @@ function isDayWeekPlanned(campId, weekMon) {
 function addSessionToConsider(campId, sessId, locationId, locationName) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
-  if(!camp||!camp.sleep) return;
+  if(!camp) return;
   const found=findDateById(camp, sessId);
   if(!found) return;
   const {sess}=found;
@@ -1102,7 +1102,7 @@ function removeDayWeekFromConsider(campId, weekMon) {
 function promoteSessionToPlanned(campId, sessId, locationId, locationName) {
   const k = S.kids[S.activeKid];
   const camp=allCamps().find(c=>c.id===campId);
-  if(!camp||!camp.sleep) return;
+  if(!camp) return;
   const found=findDateById(camp, sessId);
   if(!found) return;
   const {sess}=found;
