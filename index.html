@@ -240,6 +240,9 @@
     .sess-remove-btn { background: none; border: none; cursor: pointer; font-size: .7rem;
       color: #92400e; opacity: .7; padding: 0; line-height: 1; }
     .sess-remove-btn:hover { opacity: 1; }
+    .sess-confirm-btn { background: none; border: none; cursor: pointer; font-size: .7rem;
+      color: var(--green); font-weight: 700; padding: 0; line-height: 1; opacity: .85; }
+    .sess-confirm-btn:hover { opacity: 1; }
     .card-chevron { font-size: .7rem; color: var(--muted); transition: transform .2s; flex-shrink: 0; }
     .card.expanded .card-chevron { transform: rotate(180deg); }
     .prog-header { list-style:none; font-size:.78rem; font-weight:700;
@@ -1592,7 +1595,7 @@ function renderCamps() {
               const dateLabel=`📅 ${fmt(pd(d.s))} – ${fmt(pd(d.e))}${d.weekName ? ` · ${d.weekName}` : ''}${dateCostStr}`;
               const regLink = d.regUrl ? `<a href="${d.regUrl}" target="_blank" rel="noopener" class="reg-link" onclick="event.stopPropagation()">Register ↗</a>` : '';
               if(planned) return `<li class="sess-planned date-row" onclick="event.stopPropagation();removeSessionFromPlanned(${camp.id},${d.id})"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">✓ Planned · ✕</span></li>`;
-              if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕</button></span></li>`;
+              if(considering) return `<li class="sess-considering date-row" onclick="event.stopPropagation()"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action"><button class="sess-confirm-btn" onclick="event.stopPropagation();promoteSessionToPlanned(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})">✓ Confirm</button><button class="sess-remove-btn" onclick="event.stopPropagation();removeSessionFromConsider(${camp.id},${d.id})">✕ Remove</button></span></li>`;
               if(d.full) return `<li class="sess-full date-row"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">Full</span></li>`;
               return `<li class="date-row" onclick="event.stopPropagation();addSessionToConsider(${camp.id},${d.id},${l.id},${JSON.stringify(l.name)})"><span class="sess-label">${dateLabel}</span>${regLink}<span class="sess-action">+ Short list</span></li>`;
             });
@@ -1608,7 +1611,7 @@ function renderCamps() {
             const considering=isDayWeekConsidering(camp.id,w.mon);
             const planned=isDayWeekPlanned(camp.id,w.mon);
             if(planned) return `<li class="sess-planned" onclick="event.stopPropagation();removeDayWeekFromPlanned('${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">✓ Planned · ✕</span></li>`;
-            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation();promoteDayWeekToPlanned(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">→ Plan <button class="sess-remove-btn" onclick="event.stopPropagation();removeDayWeekFromConsider(${camp.id},'${w.mon}')">✕</button></span></li>`;
+            if(considering) return `<li class="sess-considering" onclick="event.stopPropagation()"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action"><button class="sess-confirm-btn" onclick="event.stopPropagation();promoteDayWeekToPlanned(${camp.id},'${w.mon}')">✓ Confirm</button><button class="sess-remove-btn" onclick="event.stopPropagation();removeDayWeekFromConsider(${camp.id},'${w.mon}')">✕ Remove</button></span></li>`;
             return `<li onclick="event.stopPropagation();addDayWeekToConsider(${camp.id},'${w.mon}')"><span class="sess-label">📅 ${fmt(pd(w.mon))} – ${fmt(pd(w.fri))}</span><span class="sess-action">+ Short list</span></li>`;
           }).join('')
         }</ul></div>`;
