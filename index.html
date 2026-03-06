@@ -1372,24 +1372,40 @@ function _gatherCalEvents() {
   S.kids.forEach((k, kidIdx) => {
     const seen = new Set();
     const evs = [];
-    Object.values(k.planned).forEach(e => {
-      if(seen.has(e.sessId)) return;
-      seen.add(e.sessId);
+    Object.entries(k.planned).forEach(([weekMon, e]) => {
+      // Session camps: dedup by campId+sessId (sleepaway spans multiple weeks).
+      // Day camps (sessId null): each planned week is its own event.
+      const dedupeKey = e.sessId != null ? `${e.campId}-${e.sessId}` : `${e.campId}-${weekMon}`;
+      if(seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
       const camp = allCamps().find(c => c.id === e.campId);
       if(!camp) return;
-      const found = e.sessId != null ? findDateById(camp, e.sessId) : null;
-      if(!found) return;
-      const {sess, loc} = found;
-      evs.push({
-        campName: camp.name,
-        progLabel: sess.lbl,
-        start: sess.s,
-        end: sess.e,
-        locationName: e.locationName || loc?.name || null,
-        city: loc?.city || null,
-      });
+      if(e.sessId != null) {
+        const found = findDateById(camp, e.sessId);
+        if(!found) return;
+        const {sess, loc} = found;
+        evs.push({
+          campName: camp.name,
+          progLabel: sess.lbl,
+          start: sess.s,
+          end: sess.e,
+          locationName: e.locationName || loc?.name || null,
+          city: loc?.city || null,
+        });
+      } else {
+        // Day camp planned by week — use Mon–Fri of that week as event dates
+        const w = WEEKS.find(x => x.mon === weekMon);
+        if(!w) return;
+        evs.push({
+          campName: camp.name,
+          progLabel: null,
+          start: w.mon,
+          end: w.fri,
+          locationName: e.locationName || null,
+          city: null,
+        });
+      }
     });
-    // sort by start date
     evs.sort((a,b) => a.start < b.start ? -1 : 1);
     if(evs.length) result.push({kidName: k.name, kidIdx, evs});
   });
