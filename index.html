@@ -298,6 +298,8 @@
     .cmp-card-name { font-size:.88rem; font-weight:800; font-family:'Outfit',sans-serif; }
     .cmp-card-prog { font-size:.78rem; color:var(--muted); font-style:italic; }
     .cmp-card-row { font-size:.75rem; color:#475569; }
+    .cmp-card-desc { font-size:.74rem; color:#475569; line-height:1.45; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    .cmp-card-apply { font-size:.72rem; color:#92400e; background:#fef9c3; border-radius:6px; padding:.3rem .5rem; line-height:1.4; }
     .cmp-card-cost { font-size:.82rem; font-weight:700; color:var(--green); margin-top:.15rem; }
     .cmp-card-actions { display:flex; flex-direction:column; gap:.35rem; margin-top:auto; padding-top:.65rem; }
     .cmp-choose-btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:.45rem .75rem; font-size:.78rem; font-weight:700; cursor:pointer; }
@@ -1263,7 +1265,9 @@ function showCompareModal(weekMon, kidIdx) {
     const loc = found?.loc;
     const progLabel = sess?.lbl && sess.lbl !== camp.name ? sess.lbl : null;
     const dateStr = sess ? `${_fmtShort(sess.s)} – ${_fmtShort(sess.e)}` : null;
-    const cityStr = e.locationName || loc?.city || loc?.name || null;
+    const locParts = [e.locationName || loc?.name, loc?.city, loc?.state].filter(Boolean);
+    // dedupe if locationName === city
+    const locStr = locParts.filter((v,i) => locParts.indexOf(v) === i).join(', ') || null;
     const ageMin = sess?.ageMin ?? camp.ageMin;
     const ageMax = sess?.ageMax ?? camp.ageMax;
     const ageStr = (ageMin != null || ageMax != null)
@@ -1272,14 +1276,18 @@ function showCompareModal(weekMon, kidIdx) {
     const costStr = costN > 0
       ? `~$${costN.toLocaleString()}${camp.sleep ? '/session' : '/wk'}`
       : (sess?.cost || camp.cost || 'See website');
+    const appDeadlineStr = camp.appDeadline ? `Apply by ${_fmtShort(camp.appDeadline)}` : null;
+    const applyText = camp.apply && camp.apply !== 'See website' ? camp.apply : null;
     html += `<div class="cmp-card">
       <div class="cmp-card-name">${camp.name}</div>
       ${progLabel ? `<div class="cmp-card-prog">${progLabel}</div>` : ''}
+      ${camp.desc ? `<div class="cmp-card-desc">${camp.desc}</div>` : ''}
       ${dateStr ? `<div class="cmp-card-row">📅 ${dateStr}</div>` : ''}
-      ${cityStr ? `<div class="cmp-card-row">📍 ${cityStr}</div>` : ''}
+      ${locStr ? `<div class="cmp-card-row">📍 ${locStr}</div>` : ''}
       ${ageStr ? `<div class="cmp-card-row">👤 ${ageStr}</div>` : ''}
       ${camp.type ? `<div class="cmp-card-row">🏷 ${camp.type}</div>` : ''}
       <div class="cmp-card-cost">${costStr}</div>
+      ${camp.appRequired ? `<div class="cmp-card-apply">📋 Application required${appDeadlineStr ? ' · ' + appDeadlineStr : ''}${applyText ? '<br>' + applyText : ''}</div>` : ''}
       <div class="cmp-card-actions">
         <button class="cmp-choose-btn" onclick="chooseFromCompare('${weekMon}',${e.campId},${e.sessId},${kidIdx})">✓ Choose ${camp.name}</button>
         <button class="cmp-skip-btn" onclick="removeConsiderChip('${weekMon}',${e.campId},${e.sessId},${kidIdx});closeCompareModal()">✕ Remove from list</button>
