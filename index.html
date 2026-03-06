@@ -113,7 +113,28 @@
     .wk-vac-pill { font-size: .68rem; font-weight: 700; color: #92400e;
       padding: .18rem .45rem; border-radius: 99px; background: #fef3c7; white-space: nowrap; }
     .wk-open { font-size: .7rem; font-weight: 600; color: var(--muted);
-      padding: .18rem .45rem; border-radius: 99px; background: #ddeef8; }
+      padding: .18rem .45rem; border-radius: 99px; background: #ddeef8; cursor: pointer; }
+    /* Week quick-pick modal */
+    .wp-overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; z-index:999; }
+    .wp-overlay.open { display:flex; }
+    .wp-modal { background:#fff; border-radius:16px; padding:1.25rem 1.5rem; width:500px; max-width:calc(100vw - 2rem); max-height:85vh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,.2); position:relative; }
+    .wp-close { position:absolute; top:.75rem; right:.9rem; background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--muted); line-height:1; }
+    .wp-close:hover { color:var(--text); }
+    .wp-camp-block { padding:.5rem 0; border-bottom:1px solid var(--border); }
+    .wp-camp-block:last-child { border-bottom:none; padding-bottom:0; }
+    .wp-camp-header { display:flex; align-items:center; gap:.45rem; margin-bottom:.2rem; }
+    .wp-camp-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .wp-camp-name { font-size:.85rem; font-weight:800; font-family:'Outfit',sans-serif; flex:1; }
+    .wp-type-chip { font-size:.65rem; background:#f1f5f9; color:#475569; border-radius:5px; padding:.1rem .4rem; font-weight:600; white-space:nowrap; }
+    .wp-prog-row { display:flex; align-items:center; gap:.5rem; padding:.18rem 0 .18rem 1.1rem; }
+    .wp-prog-meta { flex:1; font-size:.74rem; color:#475569; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .wp-prog-btns { display:flex; gap:.3rem; flex-shrink:0; }
+    .wp-sl-btn { background:none; border:1.5px solid var(--primary); color:var(--primary); border-radius:6px; font-size:.68rem; font-weight:700; padding:.2rem .5rem; cursor:pointer; white-space:nowrap; }
+    .wp-sl-btn:hover { background:var(--primary-light); }
+    .wp-sl-btn.listed { border-color:#d97706; color:#92400e; }
+    .wp-plan-btn { background:var(--primary); color:#fff; border:none; border-radius:6px; font-size:.68rem; font-weight:700; padding:.2rem .5rem; cursor:pointer; white-space:nowrap; }
+    .wp-plan-btn:hover { background:var(--primary-hover); }
+    .wp-plan-btn.planned { background:var(--green); }
     .wk-chip { display: flex; align-items: center; gap: .25rem; font-size: .72rem;
       font-weight: 700; padding: .22rem .5rem .22rem .45rem; border-radius: 99px;
       color: white; max-width: 125px; }
@@ -707,6 +728,14 @@
   </div>
 </div>
 
+<!-- Week quick-pick modal -->
+<div id="wpOverlay" class="wp-overlay" onclick="closeWeekPick()">
+  <div class="wp-modal" onclick="event.stopPropagation()">
+    <button class="wp-close" onclick="closeWeekPick()">✕</button>
+    <div id="wpContent"></div>
+  </div>
+</div>
+
 <!-- Compare modal -->
 <div id="cmpOverlay" class="cmp-overlay" onclick="closeCompareModal()">
   <div class="cmp-modal" onclick="event.stopPropagation()">
@@ -1247,6 +1276,98 @@ function toggleVacation(mon) {
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────
+// ── Week quick-pick ───────────────────────────────────────────────────────
+function showWeekPickModal(weekMon, kidIdx) {
+  S.activeKid = kidIdx;
+  const k = S.kids[kidIdx];
+  const w = WEEKS.find(x => x.mon === weekMon);
+  if(!w) return;
+  const wm = pd(w.mon), wf = pd(w.fri);
+  const age = parseInt(k.age) || 0;
+  const multiKid = S.kids.length > 1;
+
+  // Build list of available camps + their sessions for this week
+  const avail = [];
+  allCamps().forEach(camp => {
+    if(!campPassesFilters(camp)) return;
+    if(!campAvail(camp, w.mon, w.fri)) return;
+    const sessions = [];
+    for(const loc of camp.locations || []) {
+      for(const prog of loc.programs || []) {
+        const date = prog.dates.find(d => pd(d.s)<=wf && pd(d.e)>=wm);
+        if(!date) continue;
+        // Apply age filter at program level
+        if(age && (prog.ageMin!=null||prog.ageMax!=null)) {
+          if((prog.ageMin!=null&&age<prog.ageMin)||(prog.ageMax!=null&&age>prog.ageMax)) continue;
+        }
+        sessions.push({
+          progLabel: prog.lbl, dateId: date.id,
+          s: date.s, e: date.e,
+          costN: (date.costN||0)>0 ? date.costN : (prog.costN||0),
+          cost: prog.cost,
+          ageMin: prog.ageMin, ageMax: prog.ageMax,
+          locationId: loc.id, locationName: loc.name,
+        });
+      }
+    }
+    // Only skip camp entirely if it has program-based dates but none match age filter
+    const hasDates = camp.locations.some(l => l.programs?.some(p => p.dates.length));
+    if(hasDates && !sessions.length) return;
+    avail.push({camp, sessions});
+  });
+  avail.sort((a,b) => a.camp.name < b.camp.name ? -1 : 1);
+
+  let html = `<div style="font-size:1rem;font-weight:800;font-family:'Outfit',sans-serif;margin-bottom:.15rem">Available — ${fmt(wm)} – ${fmt(wf)}</div>`;
+  html += `<div style="font-size:.75rem;color:${multiKid?KID_COLORS[kidIdx]:' var(--muted)'};font-weight:${multiKid?700:400};margin-bottom:.85rem">${multiKid?k.name+' · ':''}${avail.length} camp${avail.length!==1?'s':''} available</div>`;
+
+  if(!avail.length) {
+    html += `<div style="font-size:.82rem;color:var(--muted);padding:.5rem 0">No camps match your current filters for this week.</div>`;
+  } else {
+    avail.forEach(({camp, sessions}) => {
+      html += `<div class="wp-camp-block">`;
+      html += `<div class="wp-camp-header"><span class="wp-camp-dot" style="background:${camp.color}"></span><span class="wp-camp-name">${camp.name}</span>${camp.type?`<span class="wp-type-chip">${camp.type}</span>`:''}</div>`;
+      if(sessions.length) {
+        sessions.forEach(s => {
+          const considering = isSessionConsidering(camp.id, s.dateId);
+          const planned = isSessionPlanned(camp.id, s.dateId);
+          const costStr = s.costN>0 ? `~$${s.costN.toLocaleString()}/wk` : (s.cost&&s.cost!=='See website'?s.cost:null);
+          const ageStr = (s.ageMin!=null||s.ageMax!=null) ? `Ages ${s.ageMin??''}${(s.ageMin!=null&&s.ageMax!=null)?'–':''}${s.ageMax??''}` : null;
+          const meta = [s.progLabel!==camp.name?s.progLabel:null, costStr, ageStr].filter(Boolean).join(' · ');
+          let btns;
+          if(planned) {
+            btns = `<button class="wp-plan-btn planned" onclick="removeSessionFromPlanned(${camp.id},${s.dateId});showWeekPickModal('${w.mon}',${kidIdx})">✓ Planned</button>`;
+          } else if(considering) {
+            btns = `<button class="wp-sl-btn listed" onclick="removeSessionFromConsider(${camp.id},${s.dateId});showWeekPickModal('${w.mon}',${kidIdx})">✓ Listed</button><button class="wp-plan-btn" onclick="promoteSessionToPlanned(${camp.id},${s.dateId},${s.locationId},${JSON.stringify(s.locationName)});closeWeekPick()">Plan</button>`;
+          } else {
+            btns = `<button class="wp-sl-btn" onclick="addSessionToConsider(${camp.id},${s.dateId},${s.locationId},${JSON.stringify(s.locationName)});showWeekPickModal('${w.mon}',${kidIdx})">+ List</button><button class="wp-plan-btn" onclick="promoteSessionToPlanned(${camp.id},${s.dateId},${s.locationId},${JSON.stringify(s.locationName)});closeWeekPick()">Plan</button>`;
+          }
+          html += `<div class="wp-prog-row"><span class="wp-prog-meta">${meta}</span><span class="wp-prog-btns">${btns}</span></div>`;
+        });
+      } else {
+        // Generic day camp — no specific session dates
+        const isDayPl = isDayWeekPlanned(camp.id, w.mon);
+        const isDayCons = isDayWeekConsidering(camp.id, w.mon);
+        const costStr = camp.costN>0 ? `~$${camp.costN.toLocaleString()}/wk` : (camp.cost&&camp.cost!=='See website'?camp.cost:'');
+        let btns;
+        if(isDayPl) {
+          btns = `<button class="wp-plan-btn planned" onclick="removeDayWeekFromPlanned('${w.mon}');showWeekPickModal('${w.mon}',${kidIdx})">✓ Planned</button>`;
+        } else if(isDayCons) {
+          btns = `<button class="wp-sl-btn listed" onclick="removeDayWeekFromConsider(${camp.id},'${w.mon}');showWeekPickModal('${w.mon}',${kidIdx})">✓ Listed</button><button class="wp-plan-btn" onclick="promoteDayWeekToPlanned(${camp.id},'${w.mon}');closeWeekPick()">Plan</button>`;
+        } else {
+          btns = `<button class="wp-sl-btn" onclick="addDayWeekToConsider(${camp.id},'${w.mon}');showWeekPickModal('${w.mon}',${kidIdx})">+ List</button><button class="wp-plan-btn" onclick="promoteDayWeekToPlanned(${camp.id},'${w.mon}');closeWeekPick()">Plan</button>`;
+        }
+        html += `<div class="wp-prog-row"><span class="wp-prog-meta">${costStr}</span><span class="wp-prog-btns">${btns}</span></div>`;
+      }
+      html += `</div>`;
+    });
+  }
+  document.getElementById('wpContent').innerHTML = html;
+  document.getElementById('wpOverlay').classList.add('open');
+}
+function closeWeekPick() {
+  document.getElementById('wpOverlay').classList.remove('open');
+}
+
 // ── Compare short-listed camps ────────────────────────────────────────────
 function showCompareModal(weekMon, kidIdx) {
   const k = S.kids[kidIdx];
@@ -1539,7 +1660,10 @@ function renderWeeks() {
           const pcost = showCost ? fmtCost(pSess?.cost ?? pc.cost, pSess?.costN ?? pc.costN, pc.sleep) : null;
           chips.push(`<div class="wk-chip" style="background:${p.color};cursor:pointer" onclick="event.stopPropagation();showCampCard(${p.campId})" title="View camp info"><span>${p.name}</span><button class="wk-rm" onclick="event.stopPropagation();removePlannedChip('${w.mon}',${kidIdx})" title="Remove">✕</button></div>${pcost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${pcost}</span>`:''}`);
         }
-        if(!chips.length) chips.push(`<span class="wk-open">${(isSel&&S.activeKid===kidIdx)?'▲':'Open ▾'}</span>`);
+        if(!chips.length) {
+          if(isSel && S.activeKid===kidIdx) chips.push(`<span class="wk-open">▲</span>`);
+          else chips.push(`<span class="wk-open" onclick="event.stopPropagation();showWeekPickModal('${w.mon}',${kidIdx})">Open ▾</span>`);
+        }
         return `<div class="wk-col k${kidIdx}-col" onclick="event.stopPropagation();selWeekKid('${w.mon}',${kidIdx})">${lbl}<div class="wk-col-chips">${chips.join('')}</div></div>`;
       }).join('');
     }
