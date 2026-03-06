@@ -285,6 +285,28 @@
     .cal-dl-btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:.5rem 1rem; font-size:.8rem; font-weight:700; cursor:pointer; }
     .cal-dl-btn:hover { background:var(--primary-hover); }
 
+    /* Compare modal */
+    .cmp-overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; z-index:999; }
+    .cmp-overlay.open { display:flex; }
+    .cmp-modal { background:#fff; border-radius:16px; padding:1.5rem 1.75rem; width:min(600px,calc(100vw - 2rem)); max-height:85vh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,.2); position:relative; }
+    .cmp-modal-close { position:absolute; top:.75rem; right:.9rem; background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--muted); line-height:1; }
+    .cmp-modal-close:hover { color:var(--text); }
+    .cmp-title { font-size:1rem; font-weight:800; font-family:'Outfit',sans-serif; margin-bottom:.2rem; }
+    .cmp-subtitle { font-size:.75rem; color:var(--muted); margin-bottom:1rem; }
+    .cmp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:.75rem; }
+    .cmp-card { border:2px solid var(--border); border-radius:12px; padding:.85rem 1rem; display:flex; flex-direction:column; gap:.3rem; }
+    .cmp-card-name { font-size:.88rem; font-weight:800; font-family:'Outfit',sans-serif; }
+    .cmp-card-prog { font-size:.78rem; color:var(--muted); font-style:italic; }
+    .cmp-card-row { font-size:.75rem; color:#475569; }
+    .cmp-card-cost { font-size:.82rem; font-weight:700; color:var(--green); margin-top:.15rem; }
+    .cmp-card-actions { display:flex; flex-direction:column; gap:.35rem; margin-top:auto; padding-top:.65rem; }
+    .cmp-choose-btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:.45rem .75rem; font-size:.78rem; font-weight:700; cursor:pointer; }
+    .cmp-choose-btn:hover { background:var(--primary-hover); }
+    .cmp-skip-btn { background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:.4rem .75rem; font-size:.75rem; cursor:pointer; }
+    .cmp-skip-btn:hover { border-color:#94a3b8; color:var(--text); }
+    .wk-compare-btn { background:none; border:1.5px dashed #7c3aed; color:#7c3aed; border-radius:99px; font-size:.66rem; font-weight:700; padding:.18rem .5rem; cursor:pointer; white-space:nowrap; }
+    .wk-compare-btn:hover { background:#f5f3ff; }
+
     /* ── Auth modal ── */
     .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6);
       backdrop-filter: blur(4px); display: flex; align-items: center;
@@ -680,6 +702,14 @@
   <div class="prog-info-modal" onclick="event.stopPropagation()">
     <button class="prog-info-close" onclick="closeProgInfo()">✕</button>
     <div id="progInfoContent"></div>
+  </div>
+</div>
+
+<!-- Compare modal -->
+<div id="cmpOverlay" class="cmp-overlay" onclick="closeCompareModal()">
+  <div class="cmp-modal" onclick="event.stopPropagation()">
+    <button class="cmp-modal-close" onclick="closeCompareModal()">✕</button>
+    <div id="cmpModalContent"></div>
   </div>
 </div>
 
@@ -1215,6 +1245,103 @@ function toggleVacation(mon) {
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────
+// ── Compare short-listed camps ────────────────────────────────────────────
+function showCompareModal(weekMon, kidIdx) {
+  const k = S.kids[kidIdx];
+  const considers = k.consider[weekMon] || [];
+  if(considers.length < 2) return;
+  const w = WEEKS.find(x => x.mon === weekMon);
+  const weekLabel = w ? `${_fmtShort(w.mon)} – ${_fmtShort(w.fri)}` : weekMon;
+  let html = `<div class="cmp-title">⚖ Compare Camps</div>`;
+  html += `<div class="cmp-subtitle">Week of ${weekLabel} · ${k.name} · ${considers.length} short-listed</div>`;
+  html += `<div class="cmp-grid">`;
+  considers.forEach(e => {
+    const camp = allCamps().find(c => c.id === e.campId);
+    if(!camp) return;
+    const found = e.sessId != null ? findDateById(camp, e.sessId) : null;
+    const sess = found?.sess;
+    const loc = found?.loc;
+    const progLabel = sess?.lbl && sess.lbl !== camp.name ? sess.lbl : null;
+    const dateStr = sess ? `${_fmtShort(sess.s)} – ${_fmtShort(sess.e)}` : null;
+    const cityStr = e.locationName || loc?.city || loc?.name || null;
+    const ageMin = sess?.ageMin ?? camp.ageMin;
+    const ageMax = sess?.ageMax ?? camp.ageMax;
+    const ageStr = (ageMin != null || ageMax != null)
+      ? `Ages ${ageMin ?? '?'}${ageMax != null ? '–' + ageMax : '+'}` : null;
+    const costN = (sess?.costN || 0) > 0 ? sess.costN : (camp.costN || 0);
+    const costStr = costN > 0
+      ? `~$${costN.toLocaleString()}${camp.sleep ? '/session' : '/wk'}`
+      : (sess?.cost || camp.cost || 'See website');
+    html += `<div class="cmp-card">
+      <div class="cmp-card-name">${camp.name}</div>
+      ${progLabel ? `<div class="cmp-card-prog">${progLabel}</div>` : ''}
+      ${dateStr ? `<div class="cmp-card-row">📅 ${dateStr}</div>` : ''}
+      ${cityStr ? `<div class="cmp-card-row">📍 ${cityStr}</div>` : ''}
+      ${ageStr ? `<div class="cmp-card-row">👤 ${ageStr}</div>` : ''}
+      ${camp.type ? `<div class="cmp-card-row">🏷 ${camp.type}</div>` : ''}
+      <div class="cmp-card-cost">${costStr}</div>
+      <div class="cmp-card-actions">
+        <button class="cmp-choose-btn" onclick="chooseFromCompare('${weekMon}',${e.campId},${e.sessId},${kidIdx})">✓ Choose ${camp.name}</button>
+        <button class="cmp-skip-btn" onclick="removeConsiderChip('${weekMon}',${e.campId},${e.sessId},${kidIdx});closeCompareModal()">✕ Remove from list</button>
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+  document.getElementById('cmpModalContent').innerHTML = html;
+  document.getElementById('cmpOverlay').classList.add('open');
+}
+function closeCompareModal() {
+  document.getElementById('cmpOverlay').classList.remove('open');
+}
+function chooseFromCompare(weekMon, campId, sessId, kidIdx) {
+  const k = S.kids[kidIdx];
+  const camp = allCamps().find(c => c.id === campId);
+  if(!camp) return;
+  // Snapshot others before promotion mutates consider
+  const others = [...(k.consider[weekMon] || [])].filter(e => !(e.campId===campId && e.sessId===sessId));
+  // Promote chosen camp (same logic as promoteConsiderChip, without renderAll)
+  if(camp.sleep && sessId != null) {
+    const found = findDateById(camp, sessId);
+    if(!found) return;
+    const {sess, loc} = found;
+    const ss = pd(sess.s), se = pd(sess.e);
+    WEEKS.forEach(w => {
+      const wm = pd(w.mon), wf = pd(w.fri);
+      if(ss <= wf && se >= wm) {
+        k.planned[w.mon] = {campId, sessId, locationId: loc.id, locationName: loc.name, color: camp.color, name: camp.name};
+        if(k.consider[w.mon]) {
+          k.consider[w.mon] = k.consider[w.mon].filter(e => !(e.campId===campId && e.sessId===sessId));
+          if(!k.consider[w.mon].length) delete k.consider[w.mon];
+        }
+      }
+    });
+  } else {
+    k.planned[weekMon] = {campId, sessId: null, locationId: null, locationName: null, color: camp.color, name: camp.name};
+    if(k.consider[weekMon]) {
+      k.consider[weekMon] = k.consider[weekMon].filter(e => e.campId !== campId);
+      if(!k.consider[weekMon].length) delete k.consider[weekMon];
+    }
+  }
+  // Remove each unchosen camp from considers (handles sleepaway multi-week spans)
+  others.forEach(e => {
+    const oc = allCamps().find(c => c.id === e.campId);
+    if(!oc) return;
+    if(oc.sleep && e.sessId != null) {
+      Object.keys(k.consider).forEach(key => {
+        k.consider[key] = k.consider[key].filter(x => !(x.campId===e.campId && x.sessId===e.sessId));
+        if(!k.consider[key].length) delete k.consider[key];
+      });
+    } else {
+      if(k.consider[weekMon]) {
+        k.consider[weekMon] = k.consider[weekMon].filter(x => x.campId !== e.campId);
+        if(!k.consider[weekMon].length) delete k.consider[weekMon];
+      }
+    }
+  });
+  closeCompareModal();
+  renderAll();
+}
+
 // ── Calendar export ───────────────────────────────────────────────────────
 function _icsDate(dateStr) { return dateStr.replace(/-/g,''); }
 function _icsDateExclusive(dateStr) {
@@ -1380,6 +1507,7 @@ function renderWeeks() {
           const ccost = showCost ? fmtCost(cSess?.cost ?? cc.cost, cSess?.costN ?? cc.costN, cc.sleep) : null;
           chips.push(`<div class="wk-chip-consider" onclick="event.stopPropagation();showCampCard(${e.campId})" style="cursor:pointer" title="View camp info"><span>${e.name}</span><button class="wk-promote" onclick="event.stopPropagation();promoteConsiderChip('${w.mon}',${e.campId},${e.sessId},${kidIdx})" title="Mark as planned">→</button><button class="wk-rm-consider" onclick="event.stopPropagation();removeConsiderChip('${w.mon}',${e.campId},${e.sessId},${kidIdx})" title="Remove">✕</button></div>${ccost?`<span style="font-size:.61rem;color:var(--muted);font-weight:600;text-align:right;padding-right:.1rem">${ccost}</span>`:''}`);
         });
+        if(considers.length >= 2 && !p) chips.push(`<button class="wk-compare-btn" onclick="event.stopPropagation();showCompareModal('${w.mon}',${kidIdx})">⚖ Compare</button>`);
         if(p) {
           const pc = allCamps().find(c=>c.id===p.campId);
           const showCost = pc && isFirstWeekOfSession(pc, p.sessId, w.mon);
